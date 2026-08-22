@@ -32,6 +32,7 @@
 *{box-sizing:border-box;-webkit-tap-highlight-color:transparent;touch-action:manipulation}
 html{overscroll-behavior:none;-webkit-text-size-adjust:100%}
 html,body{height:100%;margin:0}
+body{height:100dvh}
 body{
   background:var(--bg);color:var(--ink);
   font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,"Helvetica Neue",Arial,sans-serif;
@@ -72,8 +73,8 @@ button{font:inherit;color:inherit}
 .gauge .msg{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;font-size:13px;font-weight:700;letter-spacing:.08em;text-transform:uppercase}
 
 /* ---------- grille ---------- */
-.grid{flex:1;display:flex;flex-direction:column;gap:6px;padding:8px 12px 12px;min-height:0}
-.row{display:grid;grid-template-columns:repeat(var(--cols,7),1fr);gap:6px;flex:1;min-height:0;
+.grid{flex:1 1 0%;height:0;display:flex;flex-direction:column;gap:6px;padding:8px 12px 12px;min-height:0}
+.row{display:grid;grid-template-columns:repeat(var(--cols,7),1fr);gap:6px;flex:1 1 0%;height:0;min-height:0;
      border-radius:var(--radius);padding:3px;border:2px solid transparent;transition:background .12s,border-color .12s}
 .row.scan{background:rgba(43,107,122,.30);border-color:var(--scan)}
 .cell{
@@ -114,7 +115,7 @@ select{width:100%;padding:9px;background:var(--surface-2);color:var(--ink);borde
 .meter u{position:absolute;top:-3px;bottom:-3px;width:2px;background:var(--pick)}
 
 /* ---------- pilotage au regard ---------- */
-.gaze{flex:1;display:none;grid-template-columns:repeat(3,1fr);grid-template-rows:repeat(3,1fr);
+.gaze{flex:1 1 0%;height:0;display:none;grid-template-columns:repeat(3,1fr);grid-template-rows:repeat(3,1fr);
       gap:8px;padding:8px 12px 12px;min-height:0;position:relative}
 .gaze.on{display:grid}
 .zone{position:relative;overflow:hidden;background:var(--surface);border:2px solid var(--line);border-radius:16px;
@@ -2565,8 +2566,8 @@ function trainDone(){
 }
 
 /* ---------- Mode d'emploi intégré ---------- */
-const VERSION = '2.7';
-const VERSION_DATE = '22/08/2026 à 19h25';
+const VERSION = '2.8';
+const VERSION_DATE = '22/08/2026 à 19h50';
 const HELP = [
   ['Démarrer', [
     "À l'ouverture, choisissez un profil dans la liste, ou créez-en un.",
@@ -3046,9 +3047,21 @@ async function finishSetup(){
     const g = $('#grid'), z = $('#gazeWrap');
     const vide = (!g || g.offsetHeight < 40) && (!z || z.offsetHeight < 40);
     if(vide){
-      window.__live("Le clavier ne s'affichait pas : je repasse sur le clavier complet en balayage automatique.");
-      cfg.kb = 'full'; cfg.nav = 'scan';
-      try{ buildGrid(); render(); loopStart(); }catch(e){ window.__live('Reprise impossible : ' + e.message); }
+      // Safari peut réduire la grille à zéro : on lui impose une hauteur en pixels
+      const el = (z && z.classList.contains('on')) ? z : g;
+      if(el){
+        const haut = Math.round(innerHeight - el.getBoundingClientRect().top - 12);
+        if(haut > 120){ el.style.height = haut + 'px'; el.style.flex = '0 0 auto'; }
+        try{ if(typeof measureGaze === 'function') measureGaze(); }catch(e){}
+      }
+      setTimeout(()=>{
+        const ok2 = (g && g.offsetHeight > 40) || (z && z.offsetHeight > 40);
+        if(!ok2){
+          window.__live("Le clavier ne s'affichait pas : je repasse sur le clavier complet en balayage automatique.");
+          cfg.kb = 'full'; cfg.nav = 'scan';
+          try{ buildGrid(); render(); loopStart(); }catch(e){ window.__live('Reprise impossible : ' + e.message); }
+        }
+      }, 400);
     }
   }, 700);
 }
