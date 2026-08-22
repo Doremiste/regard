@@ -285,7 +285,7 @@ body.hasStick .grid, body.hasStick .gaze{padding-bottom:clamp(150px,20vh,190px)}
 .guide g.ok{stroke:var(--ok);stroke-dasharray:none;fill:rgba(111,216,168,.12)}
 .guide g.ok text{fill:var(--ok)}
 .camhold{position:fixed;left:-9999px;top:0;width:160px;height:120px;opacity:.01;pointer-events:none}
-.camhold.show{left:12px;right:auto;bottom:12px;top:auto;width:clamp(96px,22vw,150px);height:auto;
+.camhold.show{left:12px;right:auto;bottom:12px;top:auto;width:clamp(74px,15vw,116px);height:auto;
   aspect-ratio:4/3;opacity:1;border-radius:12px;overflow:hidden;border:2px solid var(--stop);z-index:14}
 .camhold.show.ok{border-color:var(--ok)}
 .camhold .guide text{display:none}
@@ -386,6 +386,7 @@ window.addEventListener('DOMContentLoaded', function(){
 <div class="topbar">
   <div class="brand">Parle avec moi <span id="whoName">·</span></div>
   <div class="state"><span class="dot" id="dot"></span><span id="stateTxt">à l'arrêt</span></div>
+  <button class="iconbtn" id="btnCam" title="Afficher ou masquer l'image de la caméra">Caméra</button>
   <button class="iconbtn" id="btnCenter">Recentrer</button>
   <button class="iconbtn" id="btnVoice">Ma voix</button>
   <button class="iconbtn" id="btnSettings">Réglages</button>
@@ -794,7 +795,7 @@ const DEF = {
   sizeLvl:'M', speedLvl:'M', autoCenter:true,
   mode:'cam', speed:1200, dirRep:500, dwell:900, smooth:.30, confirm:'dwell',
   minD:350, canD:1600, thr:.45, browThr:.45, jawThr:.40, pinch:.45, grip:'pinch', gripThr:0,
-  invX:false, invY:false, showCross:true, showDot:true, showCam:false, mirror:true, handSide:'auto',
+  invX:false, invY:false, showCross:true, showDot:true, showCam:true, mirror:true, handSide:'auto',
   rate:1, beep:true, say:false, autoSpeak:true, voice:'', vsUrl:'', vsKey:'', cal:null
 };
 let cfg = {...DEF};
@@ -1884,6 +1885,12 @@ function guides(){
   gFaceEls.forEach(e=>{ e.style.display = useFace?'':'none'; e.classList.toggle('ok', sense.faceOK); });
   gHandEls.forEach(e=>{ e.style.display = useHand?'':'none'; e.classList.toggle('ok', sense.handOK); });
 }
+function majCam(){
+  const cb = $('#camBox');
+  if(!cb) return;
+  const aUneVideo = !!cb.querySelector('video');
+  cb.classList.toggle('show', !!cfg.showCam && cfg.mode === 'cam' && aUneVideo);
+}
 function setState(ok, txt){
   $('#dot').classList.toggle('live', ok); $('#stateTxt').textContent = txt;
   const cb = $('#camBox'); if(cb) cb.classList.toggle('ok', !!ok);
@@ -2554,8 +2561,8 @@ function trainDone(){
 }
 
 /* ---------- Mode d'emploi intégré ---------- */
-const VERSION = '2.5';
-const VERSION_DATE = '22/08/2026 à 18h40';
+const VERSION = '2.6';
+const VERSION_DATE = '22/08/2026 à 19h05';
 const HELP = [
   ['Démarrer', [
     "À l'ouverture, choisissez un profil dans la liste, ou créez-en un.",
@@ -2812,7 +2819,7 @@ function bindUI(){
     $('#kbBig').setAttribute('aria-pressed', cfg.kb==='big');
     $('#kbAz').setAttribute('aria-pressed', cfg.kb==='azerty');
     $('#kbFull').setAttribute('aria-pressed', cfg.kb==='full');
-    $('#camBox').classList.toggle('show', cfg.showCam && cfg.mode==='cam' && !!$('#camBox').querySelector('video'));
+    majCam();
     $('#mirror').checked=cfg.mirror; $('#camBox').classList.toggle('mirror', cfg.mirror);
     $('#beep').checked=cfg.beep; $('#say').checked=cfg.say; $('#autoSpeak').checked=cfg.autoSpeak;
     $('#vsUrl').value=cfg.vsUrl||''; $('#vsKey').value=cfg.vsKey||'';
@@ -2921,6 +2928,7 @@ function bindUI(){
   on('#btnReset','click',()=>{ const id=cfg.profileId, nm=cfg.pro; cfg={...DEF}; cfg.profileId=id; cfg.pro=nm;
     applySize(); applySpeed(); sync(); loopStart(); });
 
+  on('#btnCam','click',()=>{ cfg.showCam = !cfg.showCam; sync(); majCam(); });
   on('#btnCenter','click',()=>{ recenter(1); beep(1100,90); msg('recentré'); setTimeout(()=>msg(''),900); });
   on('#btnSettings','click',()=>{ openPanel('#panel'); sync(); });
   on('#btnClose','click',()=>closePanel('#panel'));
@@ -3011,6 +3019,7 @@ async function finishSetup(){
   }
   applySize(); applySpeed(); saveActive(); saveProfiles();
   const box = $('#camBox'), v = $('#vid'); if(box && v) box.appendChild(v);
+  majCam();
   const st = $('#start'); if(st) st.remove();
   started = true;
   speak('Prêt.');
