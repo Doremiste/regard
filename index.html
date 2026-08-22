@@ -1880,11 +1880,6 @@ function ensureStartOverlay(){
   const d = document.createElement('div'); d.innerHTML = START_HTML;
   document.body.appendChild(d.firstElementChild);
   bindStart();
-window.__demarre = true;
-(function(){
-  var v = document.getElementById('verHome');
-  if(v) v.textContent = 'Parle avec moi — version ' + VERSION + ' — ' + VERSION_DATE;
-})();
 }
 
 /* ---------- 10 bis. Profils ---------- */
@@ -2538,8 +2533,8 @@ function trainDone(){
 }
 
 /* ---------- Mode d'emploi intégré ---------- */
-const VERSION = '2.1';
-const VERSION_DATE = '22/08/2026 à 17h20';
+const VERSION = '2.2';
+const VERSION_DATE = '22/08/2026 à 17h42';
 const HELP = [
   ['Démarrer', [
     "À l'ouverture, choisissez un profil dans la liste, ou créez-en un.",
@@ -3061,6 +3056,17 @@ document.addEventListener('visibilitychange', ()=>{
   else if(started && !paused){ loopStart(); }
 });
 
+
+/* --- fin du script : on signale que tout s'est chargé et on affiche la version --- */
+window.__demarre = true;
+(function(){
+  var e = document.getElementById('bootErr');
+  if(e && /ne s'est pas lanc/.test(e.textContent)) { e.textContent = ''; e.style.display = 'none'; }
+  var v = document.getElementById('verHome');
+  if(v) v.textContent = 'Parle avec moi — version ' + VERSION + ' — ' + VERSION_DATE;
+  var b = document.getElementById('verLine');
+  if(b) b.textContent = 'Parle avec moi — version ' + VERSION + ' — ' + VERSION_DATE;
+})();
 </script>
 </body>
 </html>
