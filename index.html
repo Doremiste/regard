@@ -74,10 +74,10 @@ button{font:inherit;color:inherit;border:none;background:none}
 
 #pad{position:fixed;right:10px;bottom:10px;z-index:45;display:none;align-items:flex-end;gap:10px}
 #pad.on{display:flex}
-#ok{width:74px;height:74px;border-radius:50%;background:var(--acc);color:var(--accInk);
-  font-weight:800;font-size:17px;box-shadow:0 6px 16px rgba(0,0,0,.4);touch-action:none}
+#ok{width:62px;height:62px;border-radius:50%;background:var(--acc);color:var(--accInk);
+  font-weight:800;font-size:15px;box-shadow:0 6px 16px rgba(0,0,0,.4);touch-action:none}
 #ok:active{transform:scale(.94)}
-#stk{position:relative;width:126px;height:126px;border-radius:50%;background:rgba(24,34,47,.95);
+#stk{position:relative;width:108px;height:108px;border-radius:50%;background:rgba(24,34,47,.95);
   border:2px solid var(--li);touch-action:none;box-shadow:0 6px 16px rgba(0,0,0,.4)}
 #stk .rg{position:absolute;left:50%;top:50%;width:44%;height:44%;margin:-22% 0 0 -22%;border-radius:50%;border:1px dashed var(--li)}
 #knob{position:absolute;left:50%;top:50%;width:42%;height:42%;margin:-21% 0 0 -21%;border-radius:50%;
@@ -238,11 +238,22 @@ pre{white-space:pre-wrap;word-break:break-word;font-size:12px;color:var(--dim);b
     <button id="cCam">Image caméra</button>
     <button id="cPt">Point de regard</button>
     <button id="cSon">Sons</button>
+    <button id="cPad">Trackpad</button>
   </div>
 
   <h2>Voix</h2>
   <div class="rng"><label>Voix de synthèse</label>
     <select id="selVoix" style="width:100%;padding:10px;background:var(--sf2);color:var(--ink);border:1px solid var(--li);border-radius:10px"></select></div>
+  <h2>Assistant de phrases</h2>
+  <p>L'application propose déjà des phrases à partir des mots tapés, de ce que vous dites le plus souvent et de ce qu'elle vient d'entendre. Elle apprend seule, sur l'appareil, sans rien envoyer.</p>
+  <p>Si vous disposez d'un service d'intelligence artificielle, indiquez son adresse : il recevra le texte en cours et les dernières phrases entendues, et devra renvoyer <b>{"phrases":["…","…"]}</b>. Ses propositions apparaîtront en tête, marquées « assistant ».</p>
+  <div class="rng"><label>Adresse du service</label>
+    <input type="text" id="iaUrl" placeholder="https://…  (vide = aucun)"></div>
+  <div class="rng"><label>Clé d'accès (reste sur cet appareil)</label>
+    <input type="text" id="iaCle" placeholder="facultative"></div>
+  <button class="big g" id="iaTest">Essayer l'assistant</button>
+  <button class="big g" id="bOubli">Oublier les phrases apprises</button>
+
   <button class="big g" id="bVoix">Enregistrer ma voix</button>
   <button class="big g" id="bCal">Calibrer le regard</button>
   <button class="big g" id="bDiag">Diagnostic</button>
@@ -310,8 +321,8 @@ setTimeout(function(){ if(!window.__ok) window.__err("Le script ne s'est pas lan
    MA VOIX — communication assistée. Un seul fichier, aucun serveur.
    Toute la mise en page est calculée en pixels : rien ne peut s'effondrer.
    ===================================================================== */
-const VER = '3.1';
-const VER_DATE = '22/08/2026 à 21h45';
+const VER = '3.3';
+const VER_DATE = '22/08/2026 à 22h40';
 
 const $ = s => document.querySelector(s);
 const cl = (v,a,b) => Math.max(a, Math.min(b, v));
@@ -321,7 +332,7 @@ const norm = t => (t||'').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f
 const DEF = {
   mode:'touch', val:'appui', kb:'zones',
   scan:1200, dwell:900, blinkMs:400, thr:.45, smooth:.08, hold:350, median:9, marge:.30,
-  cam:true, pt:true, son:true, voix:'', cal:null, biais:{x:0,y:0}
+  cam:true, pt:true, son:true, pad:true, iaUrl:'', iaCle:'', voix:'', cal:null, biais:{x:0,y:0}
 };
 let C = Object.assign({}, DEF);
 try{ Object.assign(C, JSON.parse(localStorage.getItem('mavoix')||'{}')); }catch(e){}
@@ -577,7 +588,7 @@ function ecrireMot(m){
 const effL = ()=>{ texte = texte.slice(0,-1); majTexte(); };
 const effM = ()=>{ texte = texte.replace(/[^\s]*\s*$/,''); majTexte(); };
 const effT = ()=>{ texte = ''; majTexte(); };
-function ditPhrase(p){ texte = p; majTexte(); dire(p); }
+function ditPhrase(p){ texte = p; majTexte(); dire(p); apprendPhrase(p); }
 
 function props(){
   const cur = norm((texte.match(/[a-zà-ÿ'\-]+$/i) || [''])[0]);
@@ -598,7 +609,7 @@ function pageRacine(){
       [ { t:'Espace', s:'', f:()=>ecrire(' ') }, { t:'⌫', s:'lettre', f:effL },
         { t:'⌫ mot', f:effM }, { t:'.', f:()=>ecrire('. ') }, { t:',', f:()=>ecrire(', ') },
         { t:'?', f:()=>ecrire(' ? ') }, { t:'!', f:()=>ecrire(' ! ') },
-        { t:'▶ Parler', f:()=>dire(texte) }, { t:'Phrases', f:()=>{ page='phrases'; construis(); } },
+        { t:'▶ Parler', f:()=>{ dire(texte); apprendPhrase(texte); } }, { t:'Phrases', f:()=>{ page='phrases'; construis(); } },
         { t:'Effacer', f:effT } ]
     ];
   }
@@ -624,7 +635,7 @@ function pageGroupe(g){
     { t:',', f:()=>ecrire(', ') }, { t:'?', f:()=>ecrire(' ? ') }, { t:'!', f:()=>ecrire(' ! ') },
     { t:"'", f:()=>ecrire("'") }, { t:'-', f:()=>ecrire('-') }, { t:'…', f:()=>ecrire('... ') }];
   else if(g.actions) it = [
-    { t:'▶ Parler', f:()=>dire(texte) }, { t:'⌫ lettre', f:effL }, { t:'⌫ mot', f:effM },
+    { t:'▶ Parler', f:()=>{ dire(texte); apprendPhrase(texte); } }, { t:'⌫ lettre', f:effL }, { t:'⌫ mot', f:effM },
     { t:'Tout effacer', f:effT }, { t:'Oui', f:()=>ditPhrase('Oui') }, { t:'Non', f:()=>ditPhrase('Non') }];
   it = it.slice(0,8);
   const r = [[],[],[]];
@@ -633,10 +644,17 @@ function pageGroupe(g){
   return r.filter(x => x.length);
 }
 function pagePhrases(){
-  const r = PHRASES.map((row,i) => row.slice(0,4).map(p => ({ t:p, s:CATS[i], f:()=>ditPhrase(p) })));
+  const r = [];
+  const sug = proposePhrases(4);
+  const ia = iaPhrases.slice(0,2);
+  const tete = ia.map(p => ({ t:p, s:'assistant', f:()=>ditPhrase(p) }))
+               .concat(sug.slice(0, 4-ia.length).map(p => ({ t:p, s:'proposée', f:()=>ditPhrase(p) })));
+  if(tete.length) r.push(tete);
+  PHRASES.forEach((row,i) => r.push(row.slice(0,4).map(p => ({ t:p, s:CATS[i], f:()=>ditPhrase(p) }))));
   r.push([{ t:'↰ Retour', f:()=>{ page='racine'; construis(); } },
-          { t:'Mes phrases', f:()=>{ page='miennes'; construis(); } }]);
-  return r;
+          { t:'Mes phrases', f:()=>{ page='miennes'; construis(); } },
+          { t:'↻ Autres propositions', f:()=>{ demandeIA(); construis(); } }]);
+  return r.slice(0,6);
 }
 function pageMiennes(){
   const it = mesPhrases.slice(0,12).map(p => ({ t:p, f:()=>ditPhrase(p) }));
@@ -731,6 +749,114 @@ function bouge(dx, dy){
   majCurseur();
 }
 
+
+/* ---------- Propositions de phrases ---------- */
+/* Trois sources, fusionnées et classées : un fonds de phrases courantes,
+   ce que la personne a déjà dit (qui remonte avec l'usage), et
+   éventuellement un assistant en ligne si une adresse est indiquée. */
+
+const FONDS = [
+"J'ai mal ici","J'ai mal à la tête","J'ai mal au dos","J'ai mal aux jambes","La douleur augmente",
+"Ça va mieux maintenant","Je n'ai plus mal","J'ai du mal à respirer","J'étouffe","Aspirez-moi s'il vous plaît",
+"Mon masque me gêne","Réglez mon masque","J'ai besoin d'oxygène","Appelez le médecin","C'est urgent",
+"Appelez l'infirmière","Aidez-moi s'il vous plaît","J'ai soif","Je voudrais de l'eau","Je voudrais un café",
+"J'ai faim","Je voudrais manger","Je n'ai pas faim","C'est trop chaud","C'est trop froid",
+"Doucement s'il vous plaît","Plus lentement","Attendez un instant","J'ai froid","J'ai chaud",
+"Une couverture s'il vous plaît","Je suis fatigué","Je voudrais dormir","Je voudrais me reposer",
+"Je voudrais me lever","Changez ma position","Relevez ma tête","Baissez ma tête","Tournez-moi sur le côté",
+"Bougez mes jambes","Bougez mon bras","Mettez un coussin","Ça me démange","Grattez-moi le dos",
+"Massez-moi les jambes","Je voudrais aller aux toilettes","Je suis mouillé","Changez-moi",
+"Je voudrais me laver","Allumez la télévision","Éteignez la télévision","Mettez de la musique",
+"Plus fort s'il vous plaît","Moins fort s'il vous plaît","Allumez la lumière","Éteignez la lumière",
+"Ouvrez la fenêtre","Fermez la porte","Donnez-moi mon téléphone","Appelez ma famille","Appelez ma femme",
+"Appelez mon mari","Je voudrais voir mes enfants","Restez avec moi","Laissez-moi seul un moment",
+"Je voudrais sortir","Je voudrais aller dehors","Bonjour","Bonsoir","Au revoir","À bientôt","Bonne nuit",
+"Merci beaucoup","Merci pour tout","S'il te plaît","Je t'aime","Je pense à toi","Tu me manques",
+"Ne t'inquiète pas","Ça va aller","Je suis content de te voir","Comment vas-tu","Assieds-toi",
+"Attends un peu","J'ai fini","Je ne sais pas","Je ne comprends pas","Répète s'il te plaît",
+"Parle plus lentement","Oui","Non","Peut-être","Bien sûr","Pas maintenant","Plus tard","D'accord",
+"Ça ne va pas","Ça va","J'ai peur","Je suis inquiet","Je suis triste","Je suis en colère",
+"Je voudrais parler","J'ai quelque chose à dire","Écoute-moi","Regarde","Là","Ici","Encore","Assez"
+];
+const VIDES = new Set(('je tu il elle on nous vous ils de du des le la les un une et est a à au aux en ' +
+'pour par sur dans que qui ne pas plus me te se mon ma mes ton ta tes son sa ses ce cet cette').split(' '));
+
+let dites = {};                       // phrases déjà dites : compte et date
+try{ dites = JSON.parse(localStorage.getItem('mavoix_dites')||'{}'); }catch(e){}
+const saveDites = ()=>{ try{ localStorage.setItem('mavoix_dites', JSON.stringify(dites)); }catch(e){} };
+
+function apprendPhrase(p){
+  const t = (p||'').trim();
+  if(t.length < 3) return;
+  const d = dites[t] || { n:0, t:0 };
+  d.n++; d.t = Date.now();
+  dites[t] = d;
+  const cles = Object.keys(dites);
+  if(cles.length > 400){                             // on garde les plus utilisées et les plus récentes
+    cles.sort((a,b) => (dites[b].n*1e10 + dites[b].t) - (dites[a].n*1e10 + dites[a].t));
+    const g = {}; cles.slice(0,300).forEach(k => g[k] = dites[k]); dites = g;
+  }
+  saveDites();
+}
+function motsUtiles(t){
+  return norm(t).split(/[^a-z0-9']+/).filter(m => m.length > 1 && !VIDES.has(m));
+}
+/* Score : mots en commun, début de phrase déjà tapé, habitude, dernière phrase entendue. */
+function proposePhrases(max){
+  const brut = texte.trim();
+  const nt = norm(brut);
+  const mots = motsUtiles(brut);
+  const dernier = (brut.match(/[a-zà-ÿ'\-]+$/i) || [''])[0];
+  const nd = norm(dernier);
+  const ecoute = entendu.length ? motsUtiles(entendu[0]) : [];
+
+  const cands = new Map();
+  const ajoute = (p, base) => { const s = cands.get(p) || 0; cands.set(p, Math.max(s, base)); };
+  FONDS.forEach(p => ajoute(p, 0));
+  Object.keys(dites).forEach(p => ajoute(p, 0));
+
+  const out = [];
+  cands.forEach((_, p) => {
+    const np = norm(p), mp = motsUtiles(p);
+    let s = 0;
+    if(nt && np.startsWith(nt)) s += 60;                        // on complète ce qui est tapé
+    else if(nd.length >= 2 && mp.some(m => m.startsWith(nd))) s += 22;
+    mots.forEach(m => { if(mp.includes(m)) s += 18; else if(mp.some(x => x.startsWith(m))) s += 10; });
+    ecoute.forEach(m => { if(mp.includes(m)) s += 12; });        // en rapport avec ce qui vient d'être dit
+    const d = dites[p];
+    if(d){ s += Math.min(20, d.n*4);
+           const j = (Date.now()-d.t)/86400000; s += j < 1 ? 8 : j < 7 ? 4 : 0; }
+    if(!nt && !ecoute.length) s += FONDS.indexOf(p) >= 0 ? 2 : 0;
+    if(s > 0 && np !== nt) out.push({ p, s });
+  });
+  out.sort((a,b) => b.s - a.s);
+  return out.slice(0, max || 6).map(o => o.p);
+}
+
+/* --- assistant en ligne, facultatif --- */
+let iaPhrases = [];
+async function demandeIA(){
+  if(!C.iaUrl) return;
+  try{
+    const r = await fetch(C.iaUrl, {
+      method:'POST',
+      headers: Object.assign({'Content-Type':'application/json'},
+                             C.iaCle ? {'Authorization':'Bearer ' + C.iaCle} : {}),
+      body: JSON.stringify({ texte, entendu: entendu.slice(0,3), deja: Object.keys(dites).slice(0,30) })
+    });
+    if(!r.ok) return;
+    const j = await r.json();
+    const l = Array.isArray(j) ? j : (j.phrases || j.suggestions || []);
+    iaPhrases = l.filter(x => typeof x === 'string').slice(0,4);
+    if(page === 'phrases') construis();
+  }catch(e){}
+}
+let iaT = null;
+function iaPlusTard(){
+  if(!C.iaUrl) return;
+  clearTimeout(iaT); iaT = setTimeout(demandeIA, 600);
+}
+
 /* ---------- 7. Mise en page, en pixels ---------- */
 function dispose(){
   const vp = (window.visualViewport && window.visualViewport.height) || innerHeight;
@@ -747,7 +873,7 @@ function dispose(){
   s.style.top = (hb + mt + ht + 6) + 'px'; s.style.height = hs + 'px';
   const htip = 22;
   const kbTop = hb + mt + ht + 6 + hs + 4;
-  const kbH = Math.max(160, Math.round(vp - kbTop - htip - 6 - (C.mode === 'pad' ? 150 : 0)));
+  const kbH = Math.max(160, Math.round(vp - kbTop - htip - 6 - (C.pad !== false ? 128 : 0)));
   const k = $('#kb');
   k.style.top = kbTop + 'px'; k.style.height = kbH + 'px';
   k.style.left = '0px'; k.style.width = vw + 'px';
@@ -765,15 +891,19 @@ function majTexte(){
   else { o.className = '';
     o.innerHTML = texte.replace(/[&<>]/g, m=>({'&':'&amp;','<':'&lt;','>':'&gt;'}[m])) + '<span class="car"></span>';
     o.scrollTop = o.scrollHeight; }
-  majProps();
+  majProps(); iaPlusTard();
   if(page === 'groupe' && groupe && groupe.mots) construis();
+  if(page === 'phrases') construis();
 }
 function majProps(){
-  const p = props(), s = $('#sug');
-  s.innerHTML = '';
+  const s = $('#sug'); s.innerHTML = '';
+  const mots = props().slice(0,2);
+  const phr = proposePhrases(3);
+  const items = mots.map(m => ({ t:m, f:()=>ecrireMot(m) }))
+    .concat(phr.map(p => ({ t:p, f:()=>ditPhrase(p) })));
   for(let i=0;i<5;i++){
     const b = document.createElement('button');
-    if(p[i]){ b.textContent = p[i]; b.onclick = ()=>ecrireMot(p[i]); }
+    if(items[i]){ b.textContent = items[i].t; b.title = items[i].t; b.onclick = items[i].f; }
     else { b.textContent = '·'; b.className = 'vide'; }
     s.appendChild(b);
   }
@@ -1168,7 +1298,7 @@ function ecouteBascule(){
 /* ---------- 12. Interface ---------- */
 const AIDE_MODE = {
   touch:'On touche directement la touche voulue. Rien à régler.',
-  pad:'Une manette et un bouton OK en bas à droite, au doigt ou à la souris.',
+  pad:'La manette et le bouton OK en bas à droite pilotent tout, au doigt ou à la souris. Ils restent disponibles dans tous les modes.',
   fleches:'Les flèches du clavier déplacent la sélection, Entrée ou Espace valide.',
   balayage:'Les touches s\'allument l\'une après l\'autre. Il suffit de valider au bon moment, avec un seul geste.',
   regard:'Le regard désigne la touche. Demande un calibrage de trente secondes et une tête à peu près stable.',
@@ -1195,6 +1325,7 @@ function marque(){
   $('#cCam').classList.toggle('on', !!C.cam);
   $('#cPt').classList.toggle('on', !!C.pt);
   $('#cSon').classList.toggle('on', !!C.son);
+  $('#cPad').classList.toggle('on', C.pad !== false);
   $('#tScan').textContent = C.scan + ' ms'; $('#rScan').value = C.scan;
   $('#tDwell').textContent = C.dwell + ' ms'; $('#rDwell').value = C.dwell;
   $('#tBlink').textContent = C.blinkMs + ' ms'; $('#rBlink').value = C.blinkMs;
@@ -1202,6 +1333,7 @@ function marque(){
   $('#bMark').style.left = (C.thr*100) + '%';
   $('#tSmo').textContent = (+C.smooth).toFixed(2); $('#rSmo').value = C.smooth;
   $('#tHold').textContent = C.hold + ' ms'; $('#rHold').value = C.hold;
+  $('#iaUrl').value = C.iaUrl || ''; $('#iaCle').value = C.iaCle || '';
   $('#tMed').textContent = C.median; $('#rMed').value = C.median;
   $('#tMar').textContent = Math.round(C.marge*100) + ' %'; $('#rMar').value = C.marge;
 }
@@ -1212,7 +1344,7 @@ function copieGroupes(){
   grp('gMode2','mode', applique); grp('gVal2','val', applique); grp('gKb2','kb', ()=>{ page='racine'; dispose(); });
 }
 function applique(){
-  $('#pad').classList.toggle('on', C.mode === 'pad');
+  $('#pad').classList.toggle('on', C.pad !== false);
   $('#cam').classList.toggle('on', !!C.cam && !!flux);
   $('#pt').classList.toggle('on', !!C.pt && (C.mode === 'regard' || C.mode === 'main'));
   balaye();
@@ -1276,6 +1408,10 @@ const AIDE = [
   ['Enregistrer sa voix', ["Enregistrez les phrases importantes avec votre vraie voix, tant qu'elle le permet : elles seront jouées telles quelles à la place de la voix de synthèse.",
     "À faire tôt, par séances de dix minutes, en commençant par les phrases d'urgence et « Je t'aime ».",
     "<b>Sauvegardez le zip</b> et copiez-le ailleurs que sur la tablette : le stockage d'un navigateur peut être effacé."]],
+  ['Propositions de phrases', ["Dès que vous tapez un mot, l'application propose des phrases entières qui le contiennent : deux mots et trois phrases dans la barre du haut, et quatre propositions en tête de la page Phrases.",
+    "Elle apprend : chaque phrase dite remonte dans les propositions, d'autant plus qu'elle est récente et fréquente. Au bout de quelques jours, vos formulations habituelles arrivent en premier.",
+    "Si l'écoute est active, les propositions tiennent compte de ce que votre interlocuteur vient de dire.",
+    "Tout cet apprentissage reste sur l'appareil. Un assistant en ligne peut être ajouté dans les options, mais rien n'est envoyé sans cela."]],
   ['Écouter la conversation', ["L'application transcrit ce que dit votre interlocuteur et propose des réponses adaptées, prêtes à être dites d'un seul appui.",
     "La transcription dépend du navigateur : elle fonctionne bien sur Chrome, et sur Safari récent. Elle peut passer par un service en ligne selon la plateforme."]],
   ['Si ça ne marche pas', ["Un bandeau rouge affiche toute erreur : c'est la première chose à lire.",
@@ -1318,6 +1454,7 @@ $('#vFiles').onchange = e => { importVoix([...e.target.files]); e.target.value =
 $('#cCam').onclick = ()=>{ C.cam = !C.cam; save(); applique(); };
 $('#cPt').onclick  = ()=>{ C.pt  = !C.pt;  save(); applique(); };
 $('#cSon').onclick = ()=>{ C.son = !C.son; save(); marque(); };
+$('#cPad').onclick = ()=>{ C.pad = (C.pad === false); save(); applique(); };
 $('#rScan').oninput  = e => { C.scan = +e.target.value; save(); marque(); balaye(); };
 $('#rDwell').oninput = e => { C.dwell = +e.target.value; save(); marque(); };
 $('#rBlink').oninput = e => { C.blinkMs = +e.target.value; save(); marque(); };
@@ -1332,6 +1469,20 @@ $('#bStable').onclick = ()=>{
   window.__err('Réglage très stable appliqué : le pointeur bouge peu, la validation demande 1,3 seconde.');
 };
 $('#selVoix').onchange = e => { C.voix = e.target.value; save(); synth('Bonjour'); };
+$('#iaUrl').onchange = e => { C.iaUrl = e.target.value.trim(); save(); };
+$('#iaCle').onchange = e => { C.iaCle = e.target.value.trim(); save(); };
+$('#iaTest').onclick = async ()=>{
+  if(!C.iaUrl){ window.__err("Indiquez d'abord l'adresse du service."); return; }
+  iaPhrases = []; await demandeIA();
+  window.__err(iaPhrases.length
+    ? 'Assistant : ' + iaPhrases.join(' · ')
+    : "L'assistant n'a rien renvoyé d'exploitable. Il doit répondre {\"phrases\":[\"…\"]}.");
+};
+$('#bOubli').onclick = ()=>{
+  if(!confirm('Oublier toutes les phrases apprises ? Les phrases enregistrées avec votre voix ne sont pas touchées.')) return;
+  dites = {}; saveDites(); majProps();
+  window.__err('Phrases apprises effacées.');
+};
 
 $('#bTestCam').onclick = async ()=>{
   window.__err('Demande en cours…');
@@ -1358,7 +1509,9 @@ $('#bDiag').onclick = ()=>{
     'Paupières : ' + niveauPaupiere.toFixed(2) + ' (seuil ' + (+C.thr).toFixed(2) + ')',
     'Calibrage : ' + (C.cal ? C.cal.n + ' points le ' + new Date(C.cal.d).toLocaleString('fr-FR') : 'aucun'),
     'Transcription : ' + (SR ? 'disponible' : 'non disponible'),
-    'Enregistrements de voix : ' + clips.size
+    'Enregistrements de voix : ' + clips.size,
+    'Phrases apprises : ' + Object.keys(dites).length +
+      ' · assistant : ' + (C.iaUrl ? 'configuré' : 'aucun')
   ].join('\n');
 };
 
