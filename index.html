@@ -222,8 +222,16 @@ pre{white-space:pre-wrap;word-break:break-word;font-size:12px;color:var(--dim);b
       <u id="bMark" style="position:absolute;top:-3px;bottom:-3px;width:2px;background:var(--acc)"></u></div></div>
   <div class="rng"><label>Stabilité du pointeur <b id="tSmo">0.15</b></label>
     <input type="range" id="rSmo" min="0.04" max="0.6" step="0.01"></div>
-  <div class="rng"><label>Fermeté de la case <b id="tHold">250 ms</b></label>
-    <input type="range" id="rHold" min="0" max="800" step="20"></div>
+  <div class="rng"><label>Fermeté de la case <b id="tHold">350 ms</b></label>
+    <input type="range" id="rHold" min="0" max="900" step="20">
+    <p>Temps passé sur une autre touche avant qu'elle prenne la main. Montez-le si la sélection saute.</p></div>
+  <div class="rng"><label>Filtre anti-sursaut <b id="tMed">9</b></label>
+    <input type="range" id="rMed" min="1" max="17" step="2">
+    <p>Nombre de mesures dont on garde la médiane. Plus haut, plus stable, avec un léger retard.</p></div>
+  <div class="rng"><label>Marge autour de la touche <b id="tMar">30 %</b></label>
+    <input type="range" id="rMar" min="0" max="0.8" step="0.05">
+    <p>La touche en cours garde la main tant que le regard reste dans cette marge autour d'elle.</p></div>
+  <button class="big g" id="bStable">Réglage très stable (yeux fatigués)</button>
 
   <h2>Affichage</h2>
   <div class="grp">
@@ -302,8 +310,8 @@ setTimeout(function(){ if(!window.__ok) window.__err("Le script ne s'est pas lan
    MA VOIX — communication assistée. Un seul fichier, aucun serveur.
    Toute la mise en page est calculée en pixels : rien ne peut s'effondrer.
    ===================================================================== */
-const VER = '3.0';
-const VER_DATE = '22/08/2026 à 21h10';
+const VER = '3.1';
+const VER_DATE = '22/08/2026 à 21h45';
 
 const $ = s => document.querySelector(s);
 const cl = (v,a,b) => Math.max(a, Math.min(b, v));
@@ -312,7 +320,7 @@ const norm = t => (t||'').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f
 /* ---------- 1. Réglages ---------- */
 const DEF = {
   mode:'touch', val:'appui', kb:'zones',
-  scan:1200, dwell:900, blinkMs:400, thr:.45, smooth:.15, hold:250,
+  scan:1200, dwell:900, blinkMs:400, thr:.45, smooth:.08, hold:350, median:9, marge:.30,
   cam:true, pt:true, son:true, voix:'', cal:null, biais:{x:0,y:0}
 };
 let C = Object.assign({}, DEF);
@@ -689,6 +697,14 @@ function majCurseur(){
 }
 function active(i){
   const k = cases[i]; if(!k) return;
+  if(C.mode === 'regard' && C.cal && touches[i]){        // la touche choisie sert de repère
+    const r = $('#kb').getBoundingClientRect(), b = touches[i].getBoundingClientRect();
+    const cx = (b.left + b.width/2 - r.left)/r.width, cy = (b.top + b.height/2 - r.top)/r.height;
+    C.biais = C.biais || {x:0,y:0};
+    C.biais.x = cl(C.biais.x + (cx-gx)*.15, -.20, .20);
+    C.biais.y = cl(C.biais.y + (cy-gy)*.15, -.20, .20);
+    save();
+  }
   curseur = i;
   const t = touches[i];
   if(t){ t.classList.add('go'); setTimeout(()=>t.classList.remove('go'), 200); }
@@ -828,12 +844,22 @@ function padFin(){ tenu = false; px = py = 0; arme = true;
 /* pointeur continu : regard et main */
 let gx = .5, gy = .5, sur = -1, depuis = 0, cand = -1, depCand = 0;
 const fifo = [];
+let vitesse = 0, dernierP = null;
 function pointe(p, now){
-  fifo.push(p); while(fifo.length > 7) fifo.shift();
+  fifo.push(p);
+  while(fifo.length > Math.max(3, C.median)) fifo.shift();
   const md = k => fifo.map(e=>e[k]).sort((a,b)=>a-b)[Math.floor(fifo.length/2)];
   const c = { x:md('x'), y:md('y') };
+
+  // vitesse mesurée sur la valeur filtrée : sert à distinguer saccade et fixation
+  if(dernierP) vitesse = vitesse*.7 + Math.hypot(c.x-dernierP.x, c.y-dernierP.y)*.3;
+  dernierP = c;
+
   const saut = Math.hypot(c.x-gx, c.y-gy);
-  const a = saut > .22 ? Math.min(.9, C.smooth*6) : C.smooth;
+  let a;
+  if(saut > .20)          a = Math.min(.9, C.smooth*8);   // vrai changement de touche : on suit vite
+  else if(vitesse < .004) a = C.smooth * .35;             // l'œil se fixe : on fige presque
+  else                    a = C.smooth;
   gx += (c.x-gx)*a; gy += (c.y-gy)*a;
   survole(now);
 }
@@ -848,6 +874,14 @@ function survole(now){
   touches.forEach((t,i) => { const b = t.getBoundingClientRect();
     if(X >= b.left && X <= b.right && Y >= b.top && Y <= b.bottom) h = i; });
 
+  // la touche en cours conserve la main tant que le pointeur reste dans sa marge
+  if(sur >= 0 && h !== sur && touches[sur]){
+    const b = touches[sur].getBoundingClientRect();
+    const mx = b.width * C.marge, my = b.height * C.marge;
+    if(X >= b.left-mx && X <= b.right+mx && Y >= b.top-my && Y <= b.bottom+my){
+      cand = sur; return;
+    }
+  }
   if(h !== sur){
     if(h !== cand){ cand = h; depCand = now; return; }
     if(now - depCand < C.hold) return;
@@ -1021,15 +1055,31 @@ function calBoucle(now, t){
     return;
   }
   if(t) cal.ech.push(t);
-  if(el <= 1200) return;
+  if(el <= 1400) return;
   $('#cible').classList.remove('arm');
-  if(cal.ech.length >= 6){
-    const md = k => cal.ech.map(e=>e[k]).sort((a,b)=>a-b)[Math.floor(cal.ech.length/2)];
+  const bons = filtreMAD(cal.ech);
+  if(bons.length < 8 && !cal.repris){
+    cal.repris = true;
+    $('#calTxt').innerHTML = '<b>On refait ce point</b>Gardez les yeux dessus';
+    cal.ph = 'vise'; cal.t0 = now; cal.ech = []; return;
+  }
+  cal.repris = false;
+  if(bons.length >= 5){
+    const md = k => bons.map(e=>e[k]).sort((a,b)=>a-b)[Math.floor(bons.length/2)];
     const m = { ax:md('ax'), ay:md('ay'), hx:md('hx'), hy:md('hy') };
     m.v = [1, m.ax, m.ay, m.ax*m.ay, m.ax*m.ax, m.ay*m.ay, m.hx, m.hy];
     cal.res.push({ v:m.v, x:P9[cal.i][0], y:P9[cal.i][1] });
   }
   cal.i++; calPoint();
+}
+/* écarte les mesures éloignées de la médiane : clignements, saccades, distractions */
+function filtreMAD(E){
+  if(E.length < 6) return E;
+  const md = a => a.slice().sort((x,y)=>x-y)[Math.floor(a.length/2)];
+  const mx = md(E.map(e=>e.ax)), my = md(E.map(e=>e.ay));
+  const dx = md(E.map(e=>Math.abs(e.ax-mx))) || 1e-4;
+  const dy = md(E.map(e=>Math.abs(e.ay-my))) || 1e-4;
+  return E.filter(e => Math.abs(e.ax-mx) < 3*dx && Math.abs(e.ay-my) < 3*dy);
 }
 function resous(A,b){
   const n = b.length, M = A.map((r,i)=>[...r, b[i]]);
@@ -1152,6 +1202,8 @@ function marque(){
   $('#bMark').style.left = (C.thr*100) + '%';
   $('#tSmo').textContent = (+C.smooth).toFixed(2); $('#rSmo').value = C.smooth;
   $('#tHold').textContent = C.hold + ' ms'; $('#rHold').value = C.hold;
+  $('#tMed').textContent = C.median; $('#rMed').value = C.median;
+  $('#tMar').textContent = Math.round(C.marge*100) + ' %'; $('#rMar').value = C.marge;
 }
 function copieGroupes(){
   [['gMode','gMode2'],['gVal','gVal2'],['gKb','gKb2']].forEach(([a,b])=>{
@@ -1272,6 +1324,13 @@ $('#rBlink').oninput = e => { C.blinkMs = +e.target.value; save(); marque(); };
 $('#rThr').oninput   = e => { C.thr = +e.target.value; save(); marque(); };
 $('#rSmo').oninput   = e => { C.smooth = +e.target.value; save(); marque(); };
 $('#rHold').oninput  = e => { C.hold = +e.target.value; save(); marque(); };
+$('#rMed').oninput   = e => { C.median = +e.target.value; fifo.length = 0; save(); marque(); };
+$('#rMar').oninput   = e => { C.marge = +e.target.value; save(); marque(); };
+$('#bStable').onclick = ()=>{
+  C.smooth = .05; C.median = 13; C.hold = 500; C.marge = .5; C.dwell = 1300;
+  save(); fifo.length = 0; marque();
+  window.__err('Réglage très stable appliqué : le pointeur bouge peu, la validation demande 1,3 seconde.');
+};
 $('#selVoix').onchange = e => { C.voix = e.target.value; save(); synth('Bonjour'); };
 
 $('#bTestCam').onclick = async ()=>{
