@@ -4,6 +4,9 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, user-scalable=no">
 <meta name="theme-color" content="#0F1620">
+<meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
+<meta http-equiv="Pragma" content="no-cache">
+<meta http-equiv="Expires" content="0">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="apple-mobile-web-app-title" content="Regard">
@@ -201,7 +204,9 @@ window.addEventListener('DOMContentLoaded', function(){
     <li>Le calibrage demande de regarder <b>cinq points</b>, une trentaine de secondes.</li>
     <li>Pendant l'usage, gardez la tête à peu près stable. Recalibrez si vous changez de position.</li>
   </ol>
-  <button class="big" id="bStart">Démarrer</button>
+  <div id="verLigne" style="font-size:12px;color:var(--dim);margin:-4px 0 10px"></div>
+  <div id="profs"></div>
+  <button class="big" id="bStart">Démarrer et calibrer</button>
   <button class="big g" id="bSouris">Essayer à la souris ou au doigt, sans caméra</button>
   <button class="big g" id="bCopie" style="display:none">Copier l'adresse de cette page</button>
 </div></div>
@@ -221,7 +226,14 @@ window.addEventListener('DOMContentLoaded', function(){
 <div class="full" id="calRep"><div class="in">
   <h1>Précision du calibrage</h1>
   <div id="repTxt"></div>
-  <button class="big" id="bRepOk">Commencer à écrire</button>
+  <div class="fld">
+    <label>Prénom de la personne</label>
+    <input id="repNom" type="text" maxlength="30" placeholder="Ex. : Marie"
+      style="width:100%;padding:11px;background:var(--surface2);color:var(--ink);border:1px solid var(--line);border-radius:10px;font-size:15px">
+    <p style="font-size:13px">Enregistrer garde le calibrage et les réglages : la prochaine fois, un appui suffira, sans refaire les treize points.</p>
+  </div>
+  <button class="big" id="bRepSave">Enregistrer ce profil et commencer</button>
+  <button class="big g" id="bRepOk">Commencer sans enregistrer</button>
   <button class="big g" id="bRepAgain">Refaire le calibrage</button>
 </div></div>
 
@@ -242,6 +254,18 @@ window.addEventListener('DOMContentLoaded', function(){
     <label>Part de la tête <b id="hwT">1.00</b></label>
     <input type="range" id="hw" min="0" max="2.5" step="0.05" value="1">
     <p style="font-size:13px">Compense les mouvements de tête. À 0, seuls les yeux comptent.</p>
+  </div>
+  <div class="fld">
+    <label>Disposition des lettres</label>
+    <div style="display:flex;gap:6px">
+      <button class="big g" id="dAlpha" style="margin:0">Alphabétique</button>
+      <button class="big g" id="dAz" style="margin:0">AZERTY</button>
+    </div>
+    <p style="font-size:13px">Alphabétique : A B C, D E F, G H I… AZERTY : A Z E, R T Y, U I O… comme un clavier d'ordinateur.</p>
+  </div>
+  <div class="fld">
+    <label>Profil en cours <b id="profNom">—</b></label>
+    <button class="big g" id="bProfSave" style="margin:0">Enregistrer les réglages dans ce profil</button>
   </div>
   <div class="chk"><input type="checkbox" id="clign"><label for="clign">Valider par un clignement, au lieu de la fixation</label></div>
   <div id="blocClign" style="display:none;border-left:2px solid var(--line);padding-left:12px;margin:6px 0 16px">
@@ -280,11 +304,13 @@ window.addEventListener('DOMContentLoaded', function(){
    Un seul fichier. Aucune autre option, volontairement.
    ===================================================================== */
 
+const VERSION = '1.3';
+const VERSION_DATE = '22 août 2026';
 const $ = s => document.querySelector(s);
 const clamp = (v,a,b) => Math.max(a, Math.min(b, v));
 
 /* ---------- 1. Réglages ---------- */
-const DEF = { dwell:900, smooth:.25, headW:1, showPt:true, son:true, voix:'', cal:null,
+const DEF = { dwell:900, smooth:.25, headW:1, showPt:true, son:true, voix:'', cal:null, clavier:'alpha', prenom:'',
               precis:true, derive:true, biais:{x:0,y:0}, qualite:null,
               clign:false, seuilOeil:.45, dureeClign:400 };
 let cfg = { ...DEF };
@@ -309,6 +335,45 @@ const RANG = new Map(MOTS.map((m,i)=>[m,i]));
 const norm = t => t.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'');
 
 let texte = '';
+let profils = [];
+try{ profils = JSON.parse(localStorage.getItem('regard_profils')||'[]'); }catch(e){}
+const saveProfils = ()=>{ try{ localStorage.setItem('regard_profils', JSON.stringify(profils)); }catch(e){} };
+const CLES = ['cal','biais','qualite','dwell','smooth','headW','clign','seuilOeil','dureeClign','clavier','voix'];
+function profilDepuisCfg(nom){
+  const p = { id:'p'+Date.now().toString(36), nom:nom, date:Date.now() };
+  CLES.forEach(k => p[k] = JSON.parse(JSON.stringify(cfg[k] === undefined ? null : cfg[k])));
+  return p;
+}
+function chargeProfil(p){
+  CLES.forEach(k => { if(p[k] !== undefined && p[k] !== null) cfg[k] = JSON.parse(JSON.stringify(p[k])); });
+  cfg.prenom = p.nom; save();
+}
+function listeProfils(){
+  const b = $('#profs'); if(!b) return;
+  b.innerHTML = '';
+  if(!profils.length){ b.innerHTML = ''; return; }
+  const t = document.createElement('p');
+  t.style.cssText = 'font-size:13px;color:var(--dim);margin:18px 0 6px';
+  t.textContent = 'Profils enregistrés :';
+  b.appendChild(t);
+  profils.forEach(p => {
+    const r = document.createElement('div');
+    r.style.cssText = 'display:flex;gap:6px;margin-bottom:8px';
+    const a = document.createElement('button');
+    a.className = 'big g'; a.style.cssText = 'flex:1;margin:0;text-align:left';
+    a.innerHTML = '<b>' + p.nom + '</b><br><span style="font-size:12px;opacity:.7">calibré le ' +
+                  new Date(p.date).toLocaleDateString('fr-FR') +
+                  (p.clavier === 'azerty' ? ' · AZERTY' : '') +
+                  (p.clign ? ' · clignement' : ' · fixation') + '</span>';
+    a.onclick = ()=>{ chargeProfil(p); demarrer(true); };
+    const x = document.createElement('button');
+    x.className = 'big g'; x.style.cssText = 'width:52px;margin:0';
+    x.textContent = '✕';
+    x.onclick = ()=>{ if(!confirm('Supprimer le profil « ' + p.nom + ' » ?')) return;
+      profils = profils.filter(q => q.id !== p.id); saveProfils(); listeProfils(); };
+    r.append(a, x); b.appendChild(r);
+  });
+}
 let niveau = 0, groupe = null;      // niveau 0 : les groupes ; niveau 1 : le contenu d'un groupe
 
 function motCourant(){ const m = texte.match(/[\p{L}'\-]+$/u); return m ? m[0] : ''; }
@@ -336,13 +401,17 @@ const effMot    = ()=>{ texte = texte.replace(/[^\s]*\s*$/,''); affiche(); };
 
 function lettres(s){ return s.split('').map(c => ({ l:c, run:()=>ecrire(c.toLowerCase()) })); }
 
+const DISPO = {
+  alpha:  ['ABCDEF','GHIJKL','MNOPQR','STUVWX','YZÉÈÀÙÇÊ'],
+  azerty: ['AZERTY','UIOPQS','DFGHJK','LMWXCV','BNÉÈÀÙÇÊ']
+};
 function groupes(){
+  const d = DISPO[cfg.clavier] || DISPO.alpha;
+  const bloc = g => ({ l: g.slice(0,3).split('').join(' '),
+                       sub: g.slice(3,6).split('').join(' ') || 'accents',
+                       items: lettres(g) });
   return [
-    { l:'A B C', sub:'D E F', items: lettres('ABCDEF') },
-    { l:'G H I', sub:'J K L', items: lettres('GHIJKL') },
-    { l:'M N O', sub:'P Q R', items: lettres('MNOPQR') },
-    { l:'S T U', sub:'V W X', items: lettres('STUVWX') },
-    { l:'Y Z', sub:'accents', items: lettres('YZÉÈÀÙÇÊ') },
+    bloc(d[0]), bloc(d[1]), bloc(d[2]), bloc(d[3]), bloc(d[4]),
     { l:'Mots', sub:'propositions', items: propositions().map(m => ({ l:m, run:()=>ecrireMot(m) })) },
     { l:'Espace', sub:'ponctuation', items:[
         { l:'␣', sub:'espace', run:()=>ecrire(' ') },
@@ -395,21 +464,26 @@ function affiche(){
 
 /* ---------- 3. Voix ---------- */
 let voix = [];
+const SS = ('speechSynthesis' in window) ? window.speechSynthesis : null;   // absent sur certains navigateurs
 function chargeVoix(){
-  voix = speechSynthesis.getVoices().filter(v=>/^fr/i.test(v.lang));
-  if(!voix.length) voix = speechSynthesis.getVoices();
+  if(!SS) return;
+  voix = SS.getVoices().filter(v=>/^fr/i.test(v.lang));
+  if(!voix.length) voix = SS.getVoices();
   const s = $('#voix'); s.innerHTML = '';
   voix.forEach(v => { const o = document.createElement('option'); o.value = v.voiceURI; o.textContent = v.name + ' (' + v.lang + ')'; s.appendChild(o); });
   if(cfg.voix) s.value = cfg.voix;
 }
-speechSynthesis.onvoiceschanged = chargeVoix; chargeVoix();
+if(SS) SS.onvoiceschanged = chargeVoix;
+try{ chargeVoix(); }catch(e){}
 function parle(t){
-  if(!t || !t.trim()) return;
-  speechSynthesis.cancel();
-  const u = new SpeechSynthesisUtterance(t);
-  const v = voix.find(x=>x.voiceURI===cfg.voix) || voix[0];
-  if(v){ u.voice = v; u.lang = v.lang; } else u.lang = 'fr-FR';
-  speechSynthesis.speak(u);
+  if(!SS || !t || !t.trim()) return;
+  try{
+    SS.cancel();
+    const u = new SpeechSynthesisUtterance(t);
+    const v = voix.find(x=>x.voiceURI===cfg.voix) || voix[0];
+    if(v){ u.voice = v; u.lang = v.lang; } else u.lang = 'fr-FR';
+    SS.speak(u);
+  }catch(e){}
 }
 let ac = null;
 function bip(f=800, ms=60){
@@ -805,6 +879,9 @@ function syncSet(){
   $('#dc').value = cfg.dureeClign; $('#dcT').textContent = cfg.dureeClign + ' ms';
   $('#so').value = cfg.seuilOeil;  $('#soT').textContent = (+cfg.seuilOeil).toFixed(2);
   $('#oeilMark').style.left = (cfg.seuilOeil*100) + '%';
+  $('#dAlpha').style.borderColor = cfg.clavier === 'alpha'  ? 'var(--pick)' : 'var(--line)';
+  $('#dAz').style.borderColor    = cfg.clavier === 'azerty' ? 'var(--pick)' : 'var(--line)';
+  $('#profNom').textContent = cfg.prenom || '—';
   $('#tip').textContent = cfg.clign
     ? "Regardez une case, puis fermez les yeux un instant pour la choisir. La case du milieu ne fait rien."
     : "Regardez une case et gardez-la des yeux pour la choisir. La case du milieu ne fait rien : c'est le repos.";
@@ -816,6 +893,20 @@ $('#hw').oninput = e => { cfg.headW = +e.target.value; syncSet(); };
 $('#showPt').onchange = e => { cfg.showPt = e.target.checked; syncSet(); };
 $('#son').onchange = e => { cfg.son = e.target.checked; syncSet(); };
 $('#precis').onchange = e => { cfg.precis = e.target.checked; syncSet(); };
+$('#dAlpha').onclick = ()=>{ cfg.clavier='alpha'; syncSet(); niveau=0; groupe=null; dessine(); };
+$('#dAz').onclick    = ()=>{ cfg.clavier='azerty'; syncSet(); niveau=0; groupe=null; dessine(); };
+$('#bProfSave').onclick = ()=>{
+  const p = profils.find(q => q.nom === cfg.prenom);
+  if(p){ CLES.forEach(k => p[k] = JSON.parse(JSON.stringify(cfg[k] === undefined ? null : cfg[k])));
+         p.date = Date.now(); saveProfils(); alert('Réglages enregistrés dans « ' + p.nom + ' ».'); }
+  else {
+    const nom = prompt('Prénom de la personne ?', cfg.prenom || '');
+    if(nom === null || !nom.trim()) return;
+    profils.push(profilDepuisCfg(nom.trim())); saveProfils();
+    cfg.prenom = nom.trim(); save(); alert('Profil « ' + cfg.prenom + ' » créé.');
+  }
+  listeProfils(); syncSet();
+};
 $('#clign').onchange = e => { cfg.clign = e.target.checked; ferm0 = 0; syncSet(); };
 $('#dc').oninput = e => { cfg.dureeClign = +e.target.value; syncSet(); };
 $('#so').oninput = e => { cfg.seuilOeil = +e.target.value; syncSet(); };
@@ -835,13 +926,20 @@ $('#bCal').onclick = ()=>{
 $('#bReCal').onclick = ()=>{ $('#set').classList.remove('on'); $('#cal').classList.add('on'); };
 $('#bCalGo').onclick = ()=>calDemarre(false);
 $('#bRepOk').onclick = ()=>{ $('#calRep').classList.remove('on'); $('#home').classList.remove('on'); affiche(); };
+$('#bRepSave').onclick = ()=>{
+  const nom = ($('#repNom').value || '').trim();
+  if(!nom){ alert('Indiquez un prénom.'); $('#repNom').focus(); return; }
+  profils.push(profilDepuisCfg(nom)); saveProfils();
+  cfg.prenom = nom; save(); listeProfils(); syncSet();
+  $('#calRep').classList.remove('on'); $('#home').classList.remove('on'); affiche();
+};
 $('#bRepAgain').onclick = ()=>{ $('#calRep').classList.remove('on'); calDemarre(false); };
 $('#bCalSkip').onclick = ()=>{ $('#cal').classList.remove('on'); if(cfg.cal) $('#home').classList.remove('on'); };
 $('#bDiag').onclick = ()=>{
   const d = $('#diag'); d.style.display = '';
   const t = flux && flux.getVideoTracks()[0], st = t ? t.getSettings() : {};
   d.textContent = [
-    'Écrire avec le regard — version 1',
+    'Écrire avec le regard — version ' + VERSION + ' (' + VERSION_DATE + ')',
     'Navigateur : ' + navigator.userAgent,
     'Écran : ' + innerWidth + '×' + innerHeight,
     'https : ' + (isSecureContext ? 'oui' : 'NON — la caméra sera bloquée'),
@@ -874,7 +972,7 @@ $('#bCopie').onclick = async ()=>{
   try{ await navigator.clipboard.writeText(a); alert("Adresse copiée.\n\nOuvrez Safari, collez-la dans la barre d'adresse, puis appuyez sur Démarrer."); }
   catch(e){ prompt("Copiez cette adresse et ouvrez-la dans Safari :", a); }
 };
-$('#bStart').onclick = async ()=>{
+async function demarrer(avecProfil){
   const err = $('#homeErr');
   err.style.display = 'none'; journal.length = 0;
   etape('Appareil : ' + navigator.userAgent);
@@ -895,17 +993,25 @@ $('#bStart').onclick = async ()=>{
   }
   try{ parle('Prêt.'); }catch(e){}
   $('#home').classList.remove('on');
-  $('#cal').classList.add('on');
   dessine(); affiche();
+  if(avecProfil && cfg.cal){                    // profil chargé : on écrit tout de suite
+    $('#tip').textContent = 'Bonjour ' + (cfg.prenom || '') + '. Regardez une case pour la choisir.';
+    return;
+  }
+  $('#cal').classList.add('on');
   if(cfg.cal){ $('#camMsg').textContent = "Un calibrage existe déjà. « Plus tard » l'utilise tel quel."; }
-};
+}
+$('#bStart').onclick = ()=>demarrer(false);
 
 /* garde l'écran allumé */
 async function veille(){ try{ if('wakeLock' in navigator) await navigator.wakeLock.request('screen'); }catch(e){} }
-document.addEventListener('visibilitychange', ()=>{ if(!document.hidden) veille(); });
-veille();
-dessine();
+document.addEventListener('visibilitychange', ()=>{ if(!document.hidden) $('#verLigne').textContent = 'Version ' + VERSION + ' — ' + VERSION_DATE;
+listeProfils();
+veille(); });
+try{ veille(); }catch(e){}
+try{ dessine(); }catch(e){ window.__dis('Affichage : ' + e.message); }
 window.__demarre = true;
+if(!SS) window.__dis("Ce navigateur n'a pas de synthèse vocale : le texte s'écrira mais ne sera pas lu à voix haute.");
 if(location.protocol === 'file:'){
   $('#homeErr').style.display = 'block';
   $('#homeErr').textContent = "Ouvrez cette page depuis une adresse en https:// — en local, iPad interdit la caméra.";
