@@ -1,0 +1,915 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, user-scalable=no">
+<meta name="theme-color" content="#0F1620">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Regard">
+<title>Écrire avec le regard</title>
+<style>
+:root{
+  --bg:#0F1620; --surface:#182333; --surface2:#1F2D40; --line:#2C3B52;
+  --ink:#EEF3F9; --dim:#93A5BC; --pick:#FFC44D; --pickInk:#22160A;
+  --ok:#6FD8A8; --stop:#F07A66; --scan:#2B6B7A;
+}
+*{box-sizing:border-box;-webkit-tap-highlight-color:transparent;touch-action:manipulation}
+html,body{height:100%;margin:0;overscroll-behavior:none}
+body{background:var(--bg);color:var(--ink);overflow:hidden;display:flex;flex-direction:column;
+  font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Arial,sans-serif;
+  user-select:none;-webkit-user-select:none;
+  padding:env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left)}
+button{font:inherit;color:inherit}
+
+/* barre du haut */
+.bar{display:flex;align-items:center;gap:10px;padding:8px 12px;border-bottom:1px solid var(--line);background:var(--surface)}
+.bar .t{font-weight:700;font-size:14px;white-space:nowrap}
+.bar .st{margin-left:auto;font-size:12.5px;color:var(--dim);display:flex;align-items:center;gap:7px}
+.dot{width:9px;height:9px;border-radius:50%;background:var(--stop)}
+.dot.on{background:var(--ok)}
+.btn{background:var(--surface2);border:1px solid var(--line);border-radius:10px;padding:7px 11px;font-size:13px;cursor:pointer}
+
+/* texte écrit */
+.out{margin:10px 12px 0;padding:12px 15px;background:var(--surface);border:1px solid var(--line);
+  border-radius:14px;font-size:clamp(20px,3.6vh,34px);font-weight:600;line-height:1.25;
+  min-height:clamp(52px,9vh,96px);max-height:20vh;overflow-y:auto;word-break:break-word}
+.out.vide{color:var(--dim);font-weight:400;font-size:clamp(15px,2.4vh,20px)}
+.car{display:inline-block;width:.07em;height:1em;background:var(--pick);vertical-align:-.12em;animation:cl 1s steps(2) infinite}
+@keyframes cl{50%{opacity:0}}
+
+/* grille de 9 zones */
+.grid{flex:1;display:grid;grid-template-columns:repeat(3,1fr);grid-template-rows:repeat(3,1fr);
+  gap:8px;padding:10px 12px 12px;min-height:0}
+.z{position:relative;overflow:hidden;background:var(--surface);border:2px solid var(--line);border-radius:16px;
+  display:flex;flex-direction:column;align-items:center;justify-content:center;gap:3px;padding:6px;text-align:center}
+.z .fill{position:absolute;inset:auto 0 0 0;height:0;background:var(--scan);opacity:.55}
+.z .txt{position:relative;font-size:clamp(16px,3.2vh,32px);font-weight:700;line-height:1.15;overflow-wrap:anywhere}
+.z .sub{position:relative;font-size:clamp(9px,1.4vh,13px);color:var(--dim);text-transform:uppercase;letter-spacing:.06em}
+.z.look{border-color:var(--scan)}
+.z.rest{background:transparent;border-style:dashed}
+.z.rest .txt{font-size:clamp(11px,1.7vh,15px);color:var(--dim);font-weight:600}
+.z.vide{opacity:.18}
+.z.arm{border-color:var(--pick)}
+.z.arm .fill{background:var(--pick);opacity:.35}
+.z.go{background:var(--pick);border-color:var(--pick)}
+.z.go .txt,.z.go .sub{color:var(--pickInk)}
+
+/* point de regard */
+.pt{position:fixed;width:26px;height:26px;margin:-13px 0 0 -13px;border-radius:50%;
+  border:2px solid var(--pick);background:rgba(255,196,77,.22);pointer-events:none;z-index:20;display:none}
+.pt.on{display:block}
+
+/* bas de page */
+.tip{padding:0 12px 8px;font-size:12.5px;color:var(--dim);text-align:center;line-height:1.4}
+
+/* panneaux plein écran */
+.full{position:fixed;inset:0;z-index:30;background:var(--bg);display:none;overflow-y:auto}
+.full.on{display:block}
+.full .in{max-width:640px;margin:0 auto;padding:24px 20px 40px}
+.full h1{font-size:clamp(22px,4.4vw,32px);margin:0 0 8px;letter-spacing:-.02em}
+.full p{color:var(--dim);line-height:1.6;font-size:15px;margin:0 0 12px}
+.full ol{color:var(--dim);line-height:1.75;font-size:14.5px;padding-left:20px}
+.full b{color:var(--ink)}
+.big{width:100%;padding:17px;border-radius:14px;border:none;background:var(--pick);color:var(--pickInk);
+  font-size:18px;font-weight:800;cursor:pointer;margin-top:8px}
+.big.g{background:transparent;color:var(--ink);border:1px solid var(--line);font-weight:600;font-size:15px}
+.err{background:rgba(240,122,102,.12);border:1px solid var(--stop);color:#FFD9D1;padding:12px;
+  border-radius:10px;font-size:13.5px;line-height:1.55;margin-bottom:12px;display:none;white-space:pre-wrap}
+.fld{margin:16px 0}
+.fld label{display:flex;justify-content:space-between;font-size:13px;color:var(--dim);margin-bottom:6px}
+.fld label b{color:var(--ink)}
+input[type=range]{width:100%;accent-color:var(--pick)}
+.chk{display:flex;align-items:center;gap:10px;font-size:14px;margin:10px 0}
+.chk input{width:20px;height:20px;accent-color:var(--pick)}
+select{width:100%;padding:9px;background:var(--surface2);color:var(--ink);border:1px solid var(--line);border-radius:10px}
+pre{white-space:pre-wrap;font-size:12px;color:var(--dim);background:var(--surface);border:1px solid var(--line);
+  border-radius:10px;padding:10px;line-height:1.5}
+
+/* aperçu caméra pendant le calibrage */
+.cam{width:min(300px,64vw);aspect-ratio:4/3;margin:0 auto 14px;border-radius:14px;overflow:hidden;
+  background:#000;border:3px solid var(--line);position:relative}
+.cam.ok{border-color:var(--ok)}
+.cam video{width:100%;height:100%;object-fit:cover;transform:scaleX(-1)}
+.hold{position:fixed;left:-9999px;top:0;width:160px;height:120px;opacity:.01;pointer-events:none}
+.hold video{width:100%;height:100%;object-fit:cover}
+
+/* cible de calibrage */
+.cible{position:fixed;width:38px;height:38px;margin:-19px 0 0 -19px;border-radius:50%;
+  background:var(--pick);box-shadow:0 0 0 0 rgba(255,196,77,.45);z-index:40;display:none}
+.cible.on{display:block}
+.cible.arm{animation:png .9s ease-out infinite}
+@keyframes png{to{box-shadow:0 0 0 30px rgba(255,196,77,0)}}
+.calmsg{position:fixed;left:50%;top:50%;transform:translate(-50%,-50%);text-align:center;z-index:39;
+  max-width:80%;font-size:17px;line-height:1.6;color:var(--dim)}
+.calmsg b{display:block;color:var(--ink);font-size:24px;margin-bottom:8px}
+</style>
+</head>
+<body>
+
+<script>
+/* Filet de sécurité : s'exécute avant tout le reste et affiche à l'écran
+   la moindre erreur, y compris une erreur de syntaxe du script principal. */
+window.__demarre = false;
+window.__dis = function(t){
+  var e = document.getElementById('homeErr');
+  if(!e) return;
+  e.style.display = 'block';
+  e.textContent = (e.textContent ? e.textContent + '\n' : '') + t;
+};
+window.addEventListener('error', function(ev){
+  window.__dis('Erreur : ' + (ev.message || ev.type) + (ev.lineno ? ' (ligne ' + ev.lineno + ')' : ''));
+});
+window.__ios = function(){
+  var u = navigator.userAgent;
+  return /iPad|iPhone|iPod/.test(u) || (/Macintosh/.test(u) && navigator.maxTouchPoints > 1);
+};
+window.__android = function(){ return /Android/.test(navigator.userAgent); };
+window.__plateforme = function(){
+  var u = navigator.userAgent, os = 'inconnu', nav = 'inconnu';
+  if(window.__ios()) os = 'iPad / iPhone';
+  else if(/Android/.test(u)) os = 'Android';
+  else if(/Windows NT 10/.test(u)) os = 'Windows 10 ou 11';
+  else if(/Windows/.test(u)) os = 'Windows';
+  else if(/Mac OS X/.test(u)) os = 'macOS';
+  else if(/Linux/.test(u)) os = 'Linux';
+  if(/Edg\//.test(u)) nav = 'Edge';
+  else if(/OPR\//.test(u)) nav = 'Opera';
+  else if(/SamsungBrowser/.test(u)) nav = 'Samsung Internet';
+  else if(/Firefox\//.test(u)) nav = 'Firefox';
+  else if(/Chrome\//.test(u)) nav = 'Chrome';
+  else if(/Safari\//.test(u) && /Version\//.test(u)) nav = 'Safari';
+  return { os: os, nav: nav };
+};
+window.__intApp = function(){
+  var u = navigator.userAgent;
+  // Safari annonce « Version/x » et « Safari/ ». Un navigateur intégré à une application, non.
+  if(window.__ios()) return !(/Version\/\d/.test(u) && /Safari\//.test(u));
+  // Android : les vues web intégrées s'annoncent par « ; wv »
+  if(window.__android()) return /;\s*wv\)/.test(u);
+  return false;
+};
+window.addEventListener('DOMContentLoaded', function(){
+  var pl = window.__plateforme(), el = document.getElementById('platLine');
+  if(el) el.textContent = 'Détecté : ' + pl.os + ' · ' + pl.nav +
+    ' · page sécurisée ' + (window.isSecureContext ? 'oui' : 'NON') +
+    (window.__intApp() ? ' · navigateur intégré à une application' : '');
+  if(window.__intApp()){
+    window.__dis(window.__ios()
+      ? "Cette page est ouverte dans le navigateur intégré d'une application (Mail, Messages, Claude, LinkedIn…).\n\n"
+        + "iOS interdit la caméra dans ces navigateurs, sans exception : aucun réglage ne peut l'autoriser.\n\n"
+        + "Ouvrez la même adresse dans Safari : menu « … » ou « Partager » de l'application → Ouvrir dans Safari."
+      : "Cette page est ouverte dans le navigateur intégré d'une application. La caméra y est souvent bloquée.\n\n"
+        + "Ouvrez la même adresse dans Chrome : menu « ⋮ » de l'application → Ouvrir dans Chrome.");
+    var b = document.getElementById('bCopie'); if(b) b.style.display = '';
+  }
+  if(location.protocol === 'file:'){
+    window.__dis("Cette page est ouverte comme un fichier local. Sur iPad, la caméra est alors interdite. "
+      + "Il faut ouvrir l'application depuis une adresse qui commence par https://");
+  }
+  setTimeout(function(){
+    if(!window.__demarre) window.__dis("Le script ne s'est pas lancé. Envoyez-moi ce message.");
+  }, 2500);
+});
+</script>
+
+<div class="bar">
+  <div class="t">Écrire avec le regard</div>
+  <div class="st"><span class="dot" id="dot"></span><span id="stTxt">à l'arrêt</span></div>
+  <button class="btn" id="bCal">Calibrer</button>
+  <button class="btn" id="bSet">Réglages</button>
+</div>
+
+<div class="out vide" id="out">Le texte s'écrira ici.</div>
+<div class="grid" id="grid"></div>
+<div class="tip" id="tip">Regardez une case et gardez-la des yeux pour la choisir. La case du milieu ne fait rien : c'est le repos.</div>
+
+<div class="pt" id="pt"></div>
+<div class="hold" id="hold"><video id="vid" playsinline muted autoplay></video></div>
+<div class="cible" id="cible"></div>
+
+<!-- accueil -->
+<div class="full on" id="home"><div class="in">
+  <h1>Écrire avec le regard</h1>
+  <p>Neuf grandes cases. On regarde une case, on la garde des yeux une seconde, elle se choisit. Pas de clignement, pas de bouton.</p>
+  <div class="err" id="homeErr"></div>
+  <div id="platLine" style="font-size:13px;color:var(--dim);margin:0 0 12px"></div>
+  <pre id="homeLog" style="display:none"></pre>
+  <ol>
+    <li>Installez la tablette à <b>50 à 70 cm</b>, à hauteur des yeux, sur un support fixe.</li>
+    <li>Lumière <b>en face</b>, jamais de fenêtre derrière la tête.</li>
+    <li>Le calibrage demande de regarder <b>cinq points</b>, une trentaine de secondes.</li>
+    <li>Pendant l'usage, gardez la tête à peu près stable. Recalibrez si vous changez de position.</li>
+  </ol>
+  <button class="big" id="bStart">Démarrer</button>
+  <button class="big g" id="bSouris">Essayer à la souris ou au doigt, sans caméra</button>
+  <button class="big g" id="bCopie" style="display:none">Copier l'adresse de cette page</button>
+</div></div>
+
+<!-- calibrage -->
+<div class="full" id="cal"><div class="in">
+  <h1>Calibrage</h1>
+  <p>Ne bougez plus la tête. Cinq points vont apparaître l'un après l'autre : regardez chacun bien au centre, jusqu'à ce qu'il disparaisse.</p>
+  <div class="cam" id="cam"><video id="prev" playsinline muted autoplay></video></div>
+  <p id="camMsg" style="text-align:center">Recherche du visage…</p>
+  <button class="big" id="bCalGo">Commencer le calibrage</button>
+  <button class="big g" id="bCalSkip">Plus tard</button>
+</div></div>
+<div class="calmsg" id="calMsg" style="display:none"></div>
+
+<!-- rapport de calibrage -->
+<div class="full" id="calRep"><div class="in">
+  <h1>Précision du calibrage</h1>
+  <div id="repTxt"></div>
+  <button class="big" id="bRepOk">Commencer à écrire</button>
+  <button class="big g" id="bRepAgain">Refaire le calibrage</button>
+</div></div>
+
+<!-- réglages -->
+<div class="full" id="set"><div class="in">
+  <h1>Réglages</h1>
+  <div class="fld">
+    <label>Temps de fixation <b id="dwT">900 ms</b></label>
+    <input type="range" id="dw" min="400" max="2500" step="50" value="900">
+    <p style="font-size:13px">Durée pendant laquelle il faut garder les yeux sur une case pour la choisir.</p>
+  </div>
+  <div class="fld">
+    <label>Stabilité du pointeur <b id="smT">0.25</b></label>
+    <input type="range" id="sm" min="0.05" max="0.7" step="0.01" value="0.25">
+    <p style="font-size:13px">Plus bas, plus stable mais plus lent à suivre.</p>
+  </div>
+  <div class="fld">
+    <label>Part de la tête <b id="hwT">1.00</b></label>
+    <input type="range" id="hw" min="0" max="2.5" step="0.05" value="1">
+    <p style="font-size:13px">Compense les mouvements de tête. À 0, seuls les yeux comptent.</p>
+  </div>
+  <div class="chk"><input type="checkbox" id="clign"><label for="clign">Valider par un clignement, au lieu de la fixation</label></div>
+  <div id="blocClign" style="display:none;border-left:2px solid var(--line);padding-left:12px;margin:6px 0 16px">
+    <p style="font-size:13px">Le regard désigne la case, un clignement volontaire la choisit. Un clignement naturel, plus bref, est ignoré.</p>
+    <div class="fld">
+      <label>Durée du clignement <b id="dcT">400 ms</b></label>
+      <input type="range" id="dc" min="200" max="1200" step="20" value="400">
+    </div>
+    <div class="fld">
+      <label>Sensibilité des paupières <b id="soT">0.45</b></label>
+      <input type="range" id="so" min="0.20" max="0.85" step="0.01" value="0.45">
+      <div class="meter" style="height:12px;border-radius:6px;background:var(--surface2);border:1px solid var(--line);position:relative;overflow:hidden;margin-top:6px">
+        <i id="oeilBar" style="display:block;height:100%;width:0;background:var(--ok)"></i>
+        <u id="oeilMark" style="position:absolute;top:-3px;bottom:-3px;width:2px;background:var(--pick)"></u>
+      </div>
+      <p style="font-size:13px">Fermez et rouvrez les yeux : la barre verte doit dépasser nettement le repère jaune quand ils sont fermés, et rester bien en dessous quand ils sont ouverts.</p>
+    </div>
+  </div>
+  <div class="chk"><input type="checkbox" id="precis" checked><label for="precis">Calibrage précis — 13 points au lieu de 5</label></div>
+  <div class="chk"><input type="checkbox" id="derive" checked><label for="derive">Correction continue de la dérive</label></div>
+  <div class="chk"><input type="checkbox" id="showPt" checked><label for="showPt">Afficher le point de regard</label></div>
+  <div class="chk"><input type="checkbox" id="son" checked><label for="son">Son à chaque choix</label></div>
+  <div class="fld">
+    <label>Voix</label>
+    <select id="voix"></select>
+  </div>
+  <button class="big" id="bReCal">Refaire le calibrage</button>
+  <button class="big g" id="bDiag">Diagnostic</button>
+  <button class="big g" id="bSetClose">Fermer</button>
+  <pre id="diag" style="display:none"></pre>
+</div></div>
+
+<script>
+/* =====================================================================
+   Écrire avec le regard — version 1, une seule commande : les yeux.
+   Un seul fichier. Aucune autre option, volontairement.
+   ===================================================================== */
+
+const $ = s => document.querySelector(s);
+const clamp = (v,a,b) => Math.max(a, Math.min(b, v));
+
+/* ---------- 1. Réglages ---------- */
+const DEF = { dwell:900, smooth:.25, headW:1, showPt:true, son:true, voix:'', cal:null,
+              precis:true, derive:true, biais:{x:0,y:0}, qualite:null,
+              clign:false, seuilOeil:.45, dureeClign:400 };
+let cfg = { ...DEF };
+try{ Object.assign(cfg, JSON.parse(localStorage.getItem('regard')||'{}')); }catch(e){}
+if(cfg.cal && !cfg.cal.X) cfg.cal = null;          // ancien format : calibrage à refaire
+const save = ()=>{ try{ localStorage.setItem('regard', JSON.stringify(cfg)); }catch(e){} };
+
+/* ---------- 2. Contenu du clavier ---------- */
+const MOTS = ("de la le et les des en un une du que qui dans pour est il elle je ne pas ce sur se plus par avec " +
+"tout au mais nous vous son sa ses leur comme faire fait sans être avoir aller venir peux peut veux voudrais " +
+"aime merci bonjour bonsoir aide aidez besoin envie mal douleur soif faim froid chaud fatigué dormir manger " +
+"boire eau café repas médicament médecin infirmière kiné aspiration respirer masque oxygène position bouger " +
+"tourner lever coucher lit fauteuil coussin jambe bras main tête dos bouche yeux toilettes changer laver " +
+"télé musique lumière fenêtre porte téléphone appeler famille femme mari fils fille enfant maman papa frère " +
+"soeur ami maison chambre dehors aujourd'hui demain hier matin midi soir nuit heure bientôt maintenant " +
+"attendre encore vite doucement bien mieux beaucoup peu trop très peut-être accord attention pardon désolé " +
+"content triste peur calme parler dire écouter voir regarder comprendre savoir penser arrête continuer " +
+"ouvrir fermer allumer éteindre donner prendre tenir tirer pousser masser gratter urgent important problème " +
+"question réponse rien quelque chose toujours jamais souvent pourquoi comment quand combien ici gauche " +
+"droite haut bas fort silence seul ensemble oui non").split(/\s+/);
+const RANG = new Map(MOTS.map((m,i)=>[m,i]));
+const norm = t => t.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'');
+
+let texte = '';
+let niveau = 0, groupe = null;      // niveau 0 : les groupes ; niveau 1 : le contenu d'un groupe
+
+function motCourant(){ const m = texte.match(/[\p{L}'\-]+$/u); return m ? m[0] : ''; }
+function propositions(){
+  const cur = norm(motCourant());
+  if(!cur) return ['Je','Oui','Non','Merci','Aide','Encore','Attends','Ça va'];
+  return MOTS.filter(m => norm(m).startsWith(cur) && norm(m) !== cur)
+             .sort((a,b) => (RANG.get(a)||999) - (RANG.get(b)||999))
+             .slice(0,8);
+}
+function ecrire(c){
+  const debut = texte.length === 0 || /[.!?]\s+$/.test(texte);
+  texte += (debut && /\p{L}/u.test(c)) ? c.toUpperCase() : c;
+  affiche();
+}
+function ecrireMot(m){
+  const cur = motCourant();
+  if(cur) texte = texte.slice(0, texte.length - cur.length);
+  const debut = texte.length === 0 || /[.!?]\s+$/.test(texte);
+  texte += (debut ? m.charAt(0).toUpperCase() + m.slice(1) : m) + ' ';
+  affiche();
+}
+const effLettre = ()=>{ texte = texte.slice(0,-1); affiche(); };
+const effMot    = ()=>{ texte = texte.replace(/[^\s]*\s*$/,''); affiche(); };
+
+function lettres(s){ return s.split('').map(c => ({ l:c, run:()=>ecrire(c.toLowerCase()) })); }
+
+function groupes(){
+  return [
+    { l:'A B C', sub:'D E F', items: lettres('ABCDEF') },
+    { l:'G H I', sub:'J K L', items: lettres('GHIJKL') },
+    { l:'M N O', sub:'P Q R', items: lettres('MNOPQR') },
+    { l:'S T U', sub:'V W X', items: lettres('STUVWX') },
+    { l:'Y Z', sub:'accents', items: lettres('YZÉÈÀÙÇÊ') },
+    { l:'Mots', sub:'propositions', items: propositions().map(m => ({ l:m, run:()=>ecrireMot(m) })) },
+    { l:'Espace', sub:'ponctuation', items:[
+        { l:'␣', sub:'espace', run:()=>ecrire(' ') },
+        { l:'.', run:()=>ecrire('. ') }, { l:',', run:()=>ecrire(', ') },
+        { l:'?', run:()=>ecrire(' ? ') }, { l:'!', run:()=>ecrire(' ! ') },
+        { l:"'", run:()=>ecrire("'") }, { l:'-', run:()=>ecrire('-') },
+        { l:'…', run:()=>ecrire('... ') } ] },
+    { l:'▶ Parler', sub:'et corriger', items:[
+        { l:'▶ Parler', run:()=>parle(texte) },
+        { l:'⌫ lettre', run:effLettre },
+        { l:'⌫ mot', run:effMot },
+        { l:'Tout effacer', run:()=>{ texte=''; affiche(); } },
+        { l:'Oui', run:()=>{ ecrire('Oui. '); parle('Oui'); } },
+        { l:'Non', run:()=>{ ecrire('Non. '); parle('Non'); } } ] }
+  ];
+}
+const PLACES = [0,1,2,3,5,6,7,8];    // la case 4, au centre, est le repos
+
+function cases(){
+  const src = niveau === 0 ? groupes() : (groupe && groupe.items) || [];
+  const t = new Array(9).fill(null);
+  PLACES.forEach((p,i) => { t[p] = src[i] || null; });
+  t[4] = niveau === 0
+    ? { repos:true, l:'Repos', sub:'ne rien choisir' }
+    : { repos:true, retour:true, l:'↰ Retour', sub:'revenir aux groupes' };
+  return t;
+}
+
+let tuiles = [], liste = [];
+function dessine(){
+  const g = $('#grid'); g.innerHTML = ''; tuiles = []; liste = cases();
+  liste.forEach(z => {
+    const d = document.createElement('div');
+    d.className = 'z' + (z ? (z.repos ? ' rest' : '') : ' vide');
+    d.innerHTML = '<div class="fill"></div>';
+    const t = document.createElement('div'); t.className = 'txt'; t.textContent = z ? z.l : '';
+    d.appendChild(t);
+    if(z && z.sub){ const u = document.createElement('div'); u.className = 'sub'; u.textContent = z.sub; d.appendChild(u); }
+    d.addEventListener('click', ()=>choisir(tuiles.indexOf(d)));   // secours à la souris
+    g.appendChild(d); tuiles.push(d);
+  });
+  mesure();
+}
+function affiche(){
+  const o = $('#out');
+  if(!texte){ o.className = 'out vide'; o.textContent = "Le texte s'écrira ici."; }
+  else { o.className = 'out'; o.innerHTML = texte.replace(/[&<>]/g, m=>({'&':'&amp;','<':'&lt;','>':'&gt;'}[m])) + '<span class="car"></span>'; o.scrollTop = o.scrollHeight; }
+  if(niveau === 0) dessine();     // les propositions changent avec le texte
+}
+
+/* ---------- 3. Voix ---------- */
+let voix = [];
+function chargeVoix(){
+  voix = speechSynthesis.getVoices().filter(v=>/^fr/i.test(v.lang));
+  if(!voix.length) voix = speechSynthesis.getVoices();
+  const s = $('#voix'); s.innerHTML = '';
+  voix.forEach(v => { const o = document.createElement('option'); o.value = v.voiceURI; o.textContent = v.name + ' (' + v.lang + ')'; s.appendChild(o); });
+  if(cfg.voix) s.value = cfg.voix;
+}
+speechSynthesis.onvoiceschanged = chargeVoix; chargeVoix();
+function parle(t){
+  if(!t || !t.trim()) return;
+  speechSynthesis.cancel();
+  const u = new SpeechSynthesisUtterance(t);
+  const v = voix.find(x=>x.voiceURI===cfg.voix) || voix[0];
+  if(v){ u.voice = v; u.lang = v.lang; } else u.lang = 'fr-FR';
+  speechSynthesis.speak(u);
+}
+let ac = null;
+function bip(f=800, ms=60){
+  if(!cfg.son) return;
+  try{
+    ac = ac || new (window.AudioContext || window.webkitAudioContext)();
+    const o = ac.createOscillator(), g = ac.createGain();
+    o.frequency.value = f; g.gain.value = .05; o.connect(g); g.connect(ac.destination);
+    o.start(); g.gain.exponentialRampToValueAtTime(.0001, ac.currentTime + ms/1000);
+    o.stop(ac.currentTime + ms/1000);
+  }catch(e){}
+}
+
+/* ---------- 4. Caméra et mesure du regard ---------- */
+let modele = null, flux = null, dernier = -1, vu = false, images = 0, ips = 0, tIps = 0;
+let brut = null;                       // mesure instantanée
+let sansCam = false;                   // essai au clic, sans détection
+let ferm0 = 0;                         // début du clignement en cours
+let gx = .5, gy = .5;                  // position lissée, en fraction d'écran
+
+const journal = [];
+function etape(t){
+  journal.push(t);
+  const l = $('#homeLog'); l.style.display = ''; l.textContent = journal.join('\n');
+}
+const attend = (ms, quoi) => new Promise((_,rej) => setTimeout(()=>rej(new Error('trop long : ' + quoi)), ms));
+
+/* Traduit l'échec de la caméra en explication utile. */
+function camErreur(e){
+  const n = e.name || '';
+  let t;
+  if((n === 'NotAllowedError' || n === 'SecurityError') && window.__intApp())
+    t = "Cette page tourne dans le navigateur intégré d'une application, où la caméra est bloquée.\n\n"
+      + (window.__ios() ? "Ouvrez la même adresse dans Safari : menu « … » ou « Partager » → Ouvrir dans Safari."
+                        : "Ouvrez la même adresse dans Chrome : menu « ⋮ » → Ouvrir dans Chrome.") + "\n"
+      + "Le bouton « Copier l'adresse » ci-dessous vous aide à le faire.";
+  else if((n === 'NotAllowedError' || n === 'SecurityError') && window.__android())
+    t = "L'accès à la caméra a été refusé.\n\n"
+      + "• Dans Chrome : touchez le cadenas à gauche de l'adresse → Autorisations → Appareil photo → Autoriser, puis rechargez.\n"
+      + "• Vérifiez aussi qu'Android autorise Chrome : Paramètres → Applications → Chrome → Autorisations → Appareil photo.\n"
+      + "• Si aucune question ne s'est affichée, c'est que la permission a déjà été refusée une fois pour ce site.";
+  else if((n === 'NotAllowedError' || n === 'SecurityError') && window.__ios())
+    t = "L'accès à la caméra a été refusé.\n\n"
+      + "• Si aucune question ne s'est affichée, la permission a déjà été refusée une fois : touchez « aA » à gauche de l'adresse → Réglages pour ce site web → Caméra → Autoriser. Puis rechargez.\n"
+      + "• Vérifiez aussi Réglages iOS → Safari → Caméra.";
+  else if(n === 'NotAllowedError' || n === 'SecurityError')
+    t = "L'accès à la caméra a été refusé.\n\n"
+      + "• Dans le navigateur : cliquez sur le cadenas à gauche de l'adresse → Caméra → Autoriser, puis rechargez la page.\n"
+      + "• Sous Windows 11 : Paramètres → Confidentialité et sécurité → Caméra. Vérifiez que « Accès à la caméra » est activé, ainsi que l'accès pour les applications de bureau.\n"
+      + "• Vérifiez enfin qu'aucun cache physique ne couvre l'objectif.";
+  else if(n === 'NotReadableError' || n === 'AbortError')
+    t = "La caméra est occupée par une autre application. Fermez l'appareil photo, une visioconférence ou tout ce qui l'utilise, puis réessayez.";
+  else if(n === 'NotFoundError' || n === 'OverconstrainedError')
+    t = "Aucune caméra frontale utilisable n'a été trouvée sur cet appareil.";
+  else
+    t = "La caméra n'a pas pu démarrer (" + n + " " + (e.message||'') + ").";
+  const err = new Error(t); err.name = n || 'Caméra'; return err;
+}
+
+async function camera(){
+  etape("1. Autorisation de la caméra — répondez « Autoriser » à la question de Safari.");
+  try{
+    flux = await navigator.mediaDevices.getUserMedia({
+      video:{ facingMode:'user', width:{ideal:640}, height:{ideal:480}, frameRate:{ideal:30} }, audio:false });
+  }catch(e1){
+    etape('   Premier essai refusé (' + e1.name + '). Nouvel essai sans exigence de format…');
+    try{
+      flux = await navigator.mediaDevices.getUserMedia({ video:true, audio:false });
+    }catch(e2){ throw camErreur(e2); }
+  }
+  etape('2. Caméra ouverte. Démarrage de la vidéo…');
+
+  const v = $('#vid');
+  v.setAttribute('playsinline',''); v.muted = true; v.srcObject = flux;
+  // sur iPad, play() peut ne jamais répondre : on n'attend pas la promesse, on attend les images
+  v.play().catch(e => etape('   (lecture : ' + e.name + ')'));
+  await Promise.race([
+    new Promise(res => { const t = setInterval(()=>{ if(v.readyState >= 2){ clearInterval(t); res(); } }, 100); }),
+    attend(12000, 'démarrage de la vidéo')
+  ]);
+  etape('3. Vidéo active (' + v.videoWidth + '×' + v.videoHeight + ').');
+
+  const pv = $('#prev');                       // aperçu séparé : on ne déplace jamais la vidéo de travail
+  if(pv){ pv.setAttribute('playsinline',''); pv.muted = true; pv.srcObject = flux; pv.play().catch(()=>{}); }
+
+  etape('4. Téléchargement du module de détection…');
+  const V = await Promise.race([
+    import('https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.14/vision_bundle.mjs'),
+    attend(30000, 'téléchargement du module')
+  ]);
+  etape('5. Module chargé. Préparation…');
+  const fs = await Promise.race([
+    V.FilesetResolver.forVisionTasks('https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.14/wasm'),
+    attend(30000, 'préparation du moteur')
+  ]);
+  const opt = {
+    baseOptions:{ modelAssetPath:'https://storage.googleapis.com/mediapipe-models/face_landmarker/face_landmarker/float16/1/face_landmarker.task', delegate:'GPU' },
+    runningMode:'VIDEO', numFaces:1, outputFaceBlendshapes:true
+  };
+  etape('6. Chargement du modèle du visage…');
+  try{ modele = await Promise.race([V.FaceLandmarker.createFromOptions(fs, opt), attend(40000, 'modèle (GPU)')]); }
+  catch(e){
+    etape('   GPU indisponible (' + e.message + '), essai sans accélération…');
+    opt.baseOptions.delegate = 'CPU';
+    modele = await Promise.race([V.FaceLandmarker.createFromOptions(fs, opt), attend(60000, 'modèle (CPU)')]);
+  }
+  etape('7. Prêt.');
+  requestAnimationFrame(boucle);
+}
+
+/* Position de l'iris dans l'orbite, plus la rotation de la tête pour la compenser. */
+function mesureRegard(lm){
+  if(!lm || lm.length < 478) return null;
+  const P = i => lm[i];
+  const dx = (a,b) => ((b.x - a.x) || 1e-6), dy = (a,b) => ((b.y - a.y) || 1e-6);
+  const lx = (P(468).x - P(33).x)  / dx(P(33),  P(133));
+  const ly = (P(468).y - P(159).y) / dy(P(159), P(145));
+  const rx = (P(473).x - P(362).x) / dx(P(362), P(263));
+  const ry = (P(473).y - P(386).y) / dy(P(386), P(374));
+  const lw = dx(P(234), P(454)), lh = dy(P(10), P(152));
+  const hx = (P(1).x - (P(234).x + P(454).x)/2) / lw;
+  const hy = (P(1).y - (P(10).y  + P(152).y)/2) / lh;
+  return { lx, ly, rx, ry, hx, hy, ax:(lx+rx)/2, ay:(ly+ry)/2, ferme:0 };
+}
+/* Huit descripteurs : la position moyenne de l'iris, ses termes croisés et carrés
+   pour rattraper la courbure, et la rotation de la tête pour la compenser. */
+function traits(m){
+  const k = cfg.headW;
+  return [1, m.ax, m.ay, m.ax*m.ay, m.ax*m.ax, m.ay*m.ay, m.hx*k, m.hy*k];
+}
+/* Moindres carrés avec régularisation, résolus par pivot de Gauss. */
+function resous(A, b){
+  const n = b.length, M = A.map((r,i)=>[...r, b[i]]);
+  for(let i=0;i<n;i++){
+    let p = i;
+    for(let r=i+1;r<n;r++) if(Math.abs(M[r][i]) > Math.abs(M[p][i])) p = r;
+    [M[i],M[p]] = [M[p],M[i]];
+    const d = M[i][i] || 1e-9;
+    for(let c=i;c<=n;c++) M[i][c] /= d;
+    for(let r=0;r<n;r++){ if(r===i) continue; const f = M[r][i]; if(!f) continue;
+      for(let c=i;c<=n;c++) M[r][c] -= f*M[i][c]; }
+  }
+  return M.map(r => r[n]);
+}
+function ajuste(ech, cle){
+  const n = 8, A = Array.from({length:n},()=>Array(n).fill(0)), b = Array(n).fill(0);
+  ech.forEach(e => { for(let i=0;i<n;i++){ for(let j=0;j<n;j++) A[i][j] += e.f[i]*e.f[j]; b[i] += e.f[i]*e[cle]; } });
+  for(let i=0;i<n;i++) A[i][i] += 1e-4;
+  return resous(A, b);
+}
+
+function boucle(){
+  requestAnimationFrame(boucle);
+  const v = $('#vid');
+  if(!modele || v.readyState < 2 || v.currentTime === dernier) return;
+  dernier = v.currentTime;
+
+  let r; try{ r = modele.detectForVideo(v, performance.now()); }catch(e){ return; }
+  const lm = r.faceLandmarks && r.faceLandmarks[0];
+  const bs = r.faceBlendshapes && r.faceBlendshapes[0] && r.faceBlendshapes[0].categories;
+
+  images++;
+  const now = performance.now();
+  if(now - tIps > 1000){ ips = images; images = 0; tIps = now; }
+
+  if(!lm){ if(vu){ vu = false; etat(false, 'visage non détecté'); } brut = null; return; }
+  if(!vu){ vu = true; etat(true, 'visage détecté'); }
+  $('#cam').classList.add('ok');
+  const cm = $('#camMsg'); if(cm && cm.textContent.indexOf('Recherche') === 0) cm.textContent = 'Visage détecté. Ne bougez plus la tête.';
+
+  const m = mesureRegard(lm);
+  if(bs){ const c = bs.find(x=>x.categoryName==='eyeBlinkLeft'), d = bs.find(x=>x.categoryName==='eyeBlinkRight');
+          m.ferme = ((c?c.score:0) + (d?d.score:0))/2; }
+  brut = m;
+
+  if(cal.actif){ calBoucle(now); return; }
+  if(!cfg.cal) return;
+
+  const ferme = m.ferme > cfg.seuilOeil;
+  if(cfg.clign){
+    if(ferme){
+      if(!ferm0) ferm0 = now;
+      if(zone >= 0 && liste[zone] && !(liste[zone].repos && !liste[zone].retour)){
+        tuiles[zone].firstChild.style.height = Math.min(100, (now - ferm0) / cfg.dureeClign * 100) + '%';
+      }
+      return;                                        // yeux fermés : le regard est gelé
+    }
+    if(ferm0){
+      const d = now - ferm0; ferm0 = 0;
+      if(zone >= 0) tuiles[zone].firstChild.style.height = '0';
+      if(d >= cfg.dureeClign && zone >= 0){ choisir(zone); return; }
+    }
+  }
+  // yeux fermés hors mode clignement : la position de l'iris n'a plus de sens, on gèle
+  if(ferme) return;
+
+  const p = versEcran(m);
+  const saut = Math.hypot(p.x - gx, p.y - gy);
+  const a = saut > .12 ? Math.min(.8, cfg.smooth*3) : cfg.smooth;   // saccade : on suit vite ; fixation : on stabilise
+  gx += (p.x - gx) * a;
+  gy += (p.y - gy) * a;
+  suivi(now);
+}
+function etat(ok, t){ $('#dot').classList.toggle('on', ok); $('#stTxt').textContent = t; }
+
+/* ---------- 5. Calibrage précis ---------- */
+/* Treize points en mode précis, cinq en mode rapide. Pour chaque point :
+   une seconde pour que l'œil arrive, puis 1,2 s de mesure. Les échantillons
+   aberrants sont écartés, un point mal mesuré est repris une fois.
+   Un modèle à huit descripteurs est ensuite ajusté par moindres carrés,
+   puis vérifié sur cinq points qui n'ont pas servi au calcul. */
+
+const P13 = [[.5,.5],[.08,.08],[.5,.08],[.92,.08],[.08,.5],[.92,.5],
+             [.08,.92],[.5,.92],[.92,.92],[.28,.28],[.72,.28],[.28,.72],[.72,.72]];
+const P5  = [[.5,.5],[.10,.10],[.90,.10],[.10,.90],[.90,.90]];
+const PV  = [[.22,.20],[.78,.20],[.5,.5],[.22,.80],[.78,.80]];   // points de vérification
+
+const cal = { actif:false, i:0, t0:0, phase:'', ech:[], res:[], liste:[], reprise:0, verif:false, err:[] };
+
+function calDemarre(verif){
+  if(!modele){ alert("La caméra n'est pas prête."); return; }
+  $('#cal').classList.remove('on'); $('#calRep').classList.remove('on');
+  cal.actif = true; cal.i = 0; cal.res = []; cal.err = []; cal.reprise = 0;
+  cal.verif = !!verif;
+  cal.liste = verif ? PV : (cfg.precis ? P13 : P5);
+  calPoint();
+}
+function calPoint(){
+  if(cal.i >= cal.liste.length){ cal.verif ? verifFin() : calFin(); return; }
+  const [x,y] = cal.liste[cal.i];
+  const c = $('#cible');
+  c.classList.add('on'); c.classList.remove('arm');
+  c.style.left = (x*innerWidth) + 'px'; c.style.top = (y*innerHeight) + 'px';
+  $('#calMsg').style.display = '';
+  $('#calMsg').innerHTML = '<b>' + (cal.verif ? 'Vérification ' : 'Point ') + (cal.i+1) +
+                           ' sur ' + cal.liste.length + '</b>Regardez le rond jaune, bien au centre';
+  cal.phase = 'vise'; cal.t0 = performance.now(); cal.ech = [];
+}
+function calBoucle(now){
+  const el = now - cal.t0;
+  if(cal.phase === 'vise'){
+    if(el > 1000){ cal.phase = 'mesure'; cal.t0 = now; $('#cible').classList.add('arm'); bip(700,60); }
+    return;
+  }
+  if(brut && brut.ferme < .45) cal.ech.push(brut);
+  if(el <= 1200) return;
+
+  $('#cible').classList.remove('arm');
+  const bon = filtre(cal.ech);
+  if(bon.length < 8 && cal.reprise === 0){          // mesure douteuse : on reprend ce point une fois
+    cal.reprise = 1; $('#calMsg').innerHTML = '<b>On recommence ce point</b>Gardez les yeux dessus';
+    cal.phase = 'vise'; cal.t0 = now; cal.ech = []; return;
+  }
+  cal.reprise = 0;
+  if(bon.length >= 5){
+    const m = median(bon);
+    const [sx,sy] = cal.liste[cal.i];
+    if(cal.verif){
+      const p = versEcran(m);
+      cal.err.push({ dx:p.x - sx, dy:p.y - sy });
+    } else {
+      cal.res.push({ f:traits(m), sx, sy });
+    }
+  }
+  cal.i++; calPoint();
+}
+/* écarte les échantillons éloignés de la médiane (clignements, saccades) */
+function filtre(ech){
+  if(ech.length < 5) return ech;
+  const mx = med(ech.map(e=>e.ax)), my = med(ech.map(e=>e.ay));
+  const dx = med(ech.map(e=>Math.abs(e.ax-mx))) || 1e-4;
+  const dy = med(ech.map(e=>Math.abs(e.ay-my))) || 1e-4;
+  return ech.filter(e => Math.abs(e.ax-mx) < 3*dx && Math.abs(e.ay-my) < 3*dy);
+}
+const med = a => a.slice().sort((x,y)=>x-y)[Math.floor(a.length/2)];
+function median(ech){
+  const m = {};
+  ['lx','ly','rx','ry','hx','hy','ax','ay'].forEach(k => m[k] = med(ech.map(e=>e[k])));
+  return m;
+}
+function calFin(){
+  if(cal.res.length < 4){
+    finCal("Calibrage incomplet : le visage n'a pas été vu assez longtemps. Vérifiez l'éclairage, puis recommencez.");
+    return;
+  }
+  cfg.cal = { X: ajuste(cal.res,'sx'), Y: ajuste(cal.res,'sy'), n: cal.res.length, date: Date.now() };
+  cfg.biais = { x:0, y:0 };
+  save(); bip(1200,140);
+  calDemarre(true);                                  // enchaîne sur la vérification
+}
+function verifFin(){
+  cal.actif = false;
+  $('#cible').classList.remove('on'); $('#calMsg').style.display = 'none';
+  const e = cal.err;
+  if(!e.length){ finCal("La vérification n'a rien pu mesurer. Recommencez le calibrage."); return; }
+  const dist = e.map(o => Math.hypot(o.dx, o.dy));
+  const moy = dist.reduce((s,v)=>s+v,0) / dist.length;
+  const pire = Math.max(...dist);
+  const zone = 1/3;                                  // une case fait un tiers de l'écran
+  const q = moy < zone*.35 ? ['Excellent','var(--ok)']
+          : moy < zone*.7  ? ['Correct','var(--pick)']
+          :                  ['Insuffisant','var(--stop)'];
+  cfg.qualite = { moy, pire, date: Date.now() }; save();
+  $('#calRep').classList.add('on');
+  $('#repTxt').innerHTML =
+    '<p style="font-size:19px;color:' + q[1] + ';font-weight:800">' + q[0] + '</p>' +
+    '<p>Erreur moyenne : <b>' + Math.round(moy*100) + ' % de la largeur de l\'écran</b>, ' +
+    'soit ' + (moy/zone).toFixed(1) + ' fois la taille d\'une case.</p>' +
+    '<p>Pire point : ' + Math.round(pire*100) + ' % de l\'écran.</p>' +
+    '<p>' + (moy < zone*.7
+      ? "C'est assez précis pour neuf grandes cases. Vous pouvez commencer."
+      : "Trop imprécis : refaites le calibrage en gardant la tête bien immobile, avec la lumière en face et sans reflet sur des lunettes.") + '</p>';
+}
+function finCal(msg){
+  cal.actif = false;
+  $('#cible').classList.remove('on'); $('#calMsg').style.display = 'none';
+  alert(msg); $('#cal').classList.add('on');
+}
+function versEcran(m){
+  const c = cfg.cal; if(!c || !c.X) return { x:.5, y:.5 };
+  const f = traits(m), d = a => a.reduce((s,v,i)=>s+v*f[i], 0);
+  const b = cfg.biais || { x:0, y:0 };
+  return { x: clamp(d(c.X) + b.x, 0, 1), y: clamp(d(c.Y) + b.y, 0, 1) };
+}
+
+/* ---------- 6. Choix par fixation ---------- */
+let zone = -1, depuis = 0, gele = 0, rects = [], cadre = null;
+function mesure(){
+  cadre = $('#grid').getBoundingClientRect();
+  rects = tuiles.map(t => t.getBoundingClientRect());
+}
+addEventListener('resize', ()=>setTimeout(mesure, 200));
+addEventListener('orientationchange', ()=>setTimeout(mesure, 350));
+
+function suivi(now){
+  if(!cadre || !rects.length) mesure();
+  const px = cadre.left + gx*cadre.width, py = cadre.top + gy*cadre.height;
+  const p = $('#pt');
+  p.classList.toggle('on', cfg.showPt);
+  p.style.left = px + 'px'; p.style.top = py + 'px';
+
+  let sur = -1;
+  rects.forEach((r,i) => { if(px>=r.left && px<=r.right && py>=r.top && py<=r.bottom) sur = i; });
+
+  if(sur !== zone){
+    zone = sur; depuis = now;
+    tuiles.forEach((t,i) => { t.classList.toggle('look', i===sur);
+      if(i!==sur){ t.firstChild.style.height = '0'; t.classList.remove('arm'); } });
+    return;
+  }
+  if(sur < 0 || now < gele) return;
+  const z = liste[sur];
+  if(!z || (z.repos && !z.retour)){ tuiles[sur].firstChild.style.height = '0'; return; }
+
+  if(cfg.clign){                                     // la case est armée, on attend le clignement
+    tuiles[sur].classList.add('arm');
+    tuiles[sur].firstChild.style.height = '0';
+    return;
+  }
+  const d = now - depuis;
+  tuiles[sur].firstChild.style.height = Math.min(100, d / cfg.dwell * 100) + '%';
+  if(d >= cfg.dwell) choisir(sur);
+}
+function choisir(i){
+  const z = liste[i]; if(!z) return;
+  if(cfg.derive && rects[i] && cadre){                 // la case choisie devient une référence
+    const r = rects[i];
+    const cx = (r.left + r.width/2  - cadre.left) / cadre.width;
+    const cy = (r.top  + r.height/2 - cadre.top)  / cadre.height;
+    const b = cfg.biais || (cfg.biais = {x:0,y:0});
+    b.x = clamp(b.x + (cx - gx)*.12, -.2, .2);
+    b.y = clamp(b.y + (cy - gy)*.12, -.2, .2);
+    save();
+  }
+  gele = performance.now() + 650;
+  depuis = performance.now();
+  const t = tuiles[i]; t.classList.add('go'); setTimeout(()=>t.classList.remove('go'), 220);
+  bip(1050, 80);
+  if(z.repos){ if(z.retour){ niveau = 0; groupe = null; dessine(); } return; }
+  if(z.items){ niveau = 1; groupe = z; dessine(); return; }
+  if(z.run){ z.run(); niveau = 0; groupe = null; dessine(); }
+}
+
+/* ---------- 7. Réglages et démarrage ---------- */
+function syncSet(){
+  $('#dw').value = cfg.dwell;  $('#dwT').textContent = cfg.dwell + ' ms';
+  $('#sm').value = cfg.smooth; $('#smT').textContent = (+cfg.smooth).toFixed(2);
+  $('#hw').value = cfg.headW;  $('#hwT').textContent = (+cfg.headW).toFixed(2);
+  $('#showPt').checked = cfg.showPt; $('#son').checked = cfg.son;
+  $('#precis').checked = cfg.precis; $('#derive').checked = cfg.derive;
+  $('#clign').checked = cfg.clign;
+  $('#blocClign').style.display = cfg.clign ? '' : 'none';
+  $('#dc').value = cfg.dureeClign; $('#dcT').textContent = cfg.dureeClign + ' ms';
+  $('#so').value = cfg.seuilOeil;  $('#soT').textContent = (+cfg.seuilOeil).toFixed(2);
+  $('#oeilMark').style.left = (cfg.seuilOeil*100) + '%';
+  $('#tip').textContent = cfg.clign
+    ? "Regardez une case, puis fermez les yeux un instant pour la choisir. La case du milieu ne fait rien."
+    : "Regardez une case et gardez-la des yeux pour la choisir. La case du milieu ne fait rien : c'est le repos.";
+  save();
+}
+$('#dw').oninput = e => { cfg.dwell = +e.target.value; syncSet(); };
+$('#sm').oninput = e => { cfg.smooth = +e.target.value; syncSet(); };
+$('#hw').oninput = e => { cfg.headW = +e.target.value; syncSet(); };
+$('#showPt').onchange = e => { cfg.showPt = e.target.checked; syncSet(); };
+$('#son').onchange = e => { cfg.son = e.target.checked; syncSet(); };
+$('#precis').onchange = e => { cfg.precis = e.target.checked; syncSet(); };
+$('#clign').onchange = e => { cfg.clign = e.target.checked; ferm0 = 0; syncSet(); };
+$('#dc').oninput = e => { cfg.dureeClign = +e.target.value; syncSet(); };
+$('#so').oninput = e => { cfg.seuilOeil = +e.target.value; syncSet(); };
+$('#derive').onchange = e => { cfg.derive = e.target.checked; if(!cfg.derive) cfg.biais = {x:0,y:0}; syncSet(); };
+$('#voix').onchange = e => { cfg.voix = e.target.value; save(); parle('Bonjour'); };
+
+$('#bSet').onclick = ()=>{ syncSet(); $('#set').classList.add('on'); };
+setInterval(()=>{
+  if(!$('#set').classList.contains('on') || !brut) return;
+  $('#oeilBar').style.width = Math.min(100, brut.ferme*100) + '%';
+}, 80);
+$('#bSetClose').onclick = ()=>$('#set').classList.remove('on');
+$('#bCal').onclick = ()=>{
+  if(sansCam){ alert("Le calibrage demande la caméra. Rechargez la page et appuyez sur Démarrer."); return; }
+  $('#set').classList.remove('on'); $('#cal').classList.add('on');
+};
+$('#bReCal').onclick = ()=>{ $('#set').classList.remove('on'); $('#cal').classList.add('on'); };
+$('#bCalGo').onclick = ()=>calDemarre(false);
+$('#bRepOk').onclick = ()=>{ $('#calRep').classList.remove('on'); $('#home').classList.remove('on'); affiche(); };
+$('#bRepAgain').onclick = ()=>{ $('#calRep').classList.remove('on'); calDemarre(false); };
+$('#bCalSkip').onclick = ()=>{ $('#cal').classList.remove('on'); if(cfg.cal) $('#home').classList.remove('on'); };
+$('#bDiag').onclick = ()=>{
+  const d = $('#diag'); d.style.display = '';
+  const t = flux && flux.getVideoTracks()[0], st = t ? t.getSettings() : {};
+  d.textContent = [
+    'Écrire avec le regard — version 1',
+    'Navigateur : ' + navigator.userAgent,
+    'Écran : ' + innerWidth + '×' + innerHeight,
+    'https : ' + (isSecureContext ? 'oui' : 'NON — la caméra sera bloquée'),
+    'Modèle : ' + (modele ? 'chargé' : 'non chargé'),
+    'Caméra : ' + (t ? st.width + '×' + st.height : 'inactive'),
+    'Images traitées : ' + ips + ' par seconde',
+    'Visage vu : ' + (vu ? 'oui' : 'non'),
+    'Mesure brute : ' + (brut ? brut.x.toFixed(3) + ' / ' + brut.y.toFixed(3) : '—'),
+    'Fermeture des yeux : ' + (brut ? brut.ferme.toFixed(2) : '—'),
+    'Calibrage : ' + (cfg.cal ? (cfg.cal.n + ' points, le ' + new Date(cfg.cal.date).toLocaleString('fr-FR')) : 'aucun'),
+    'Précision mesurée : ' + (cfg.qualite ? (Math.round(cfg.qualite.moy*100) + ' % en moyenne, ' + Math.round(cfg.qualite.pire*100) + ' % au pire') : 'non vérifiée'),
+    'Correction de dérive : ' + (cfg.biais ? cfg.biais.x.toFixed(3) + ' / ' + cfg.biais.y.toFixed(3) : '—'),
+    'Position écran : ' + gx.toFixed(2) + ' / ' + gy.toFixed(2) + '  (case ' + zone + ')',
+    'Fixation : ' + cfg.dwell + ' ms · lissage ' + cfg.smooth + ' · tête ' + cfg.headW
+  ].join('\n');
+};
+
+addEventListener('error', e => etape('ERREUR : ' + (e.message||e.type)));
+addEventListener('unhandledrejection', e => etape('ERREUR : ' + ((e.reason && e.reason.message) || e.reason)));
+
+$('#bSouris').onclick = ()=>{
+  sansCam = true;
+  $('#home').classList.remove('on');
+  $('#tip').textContent = "Mode sans caméra : cliquez ou touchez une case pour la choisir.";
+  etat(true, 'mode souris');
+  dessine(); affiche();
+};
+$('#bCopie').onclick = async ()=>{
+  const a = location.href;
+  try{ await navigator.clipboard.writeText(a); alert("Adresse copiée.\n\nOuvrez Safari, collez-la dans la barre d'adresse, puis appuyez sur Démarrer."); }
+  catch(e){ prompt("Copiez cette adresse et ouvrez-la dans Safari :", a); }
+};
+$('#bStart').onclick = async ()=>{
+  const err = $('#homeErr');
+  err.style.display = 'none'; journal.length = 0;
+  etape('Appareil : ' + navigator.userAgent);
+  etape('Page sécurisée (https) : ' + (isSecureContext ? 'oui' : 'NON'));
+  if(!navigator.mediaDevices || !isSecureContext){
+    err.style.display = 'block';
+    err.textContent = "La caméra exige une page en https (ou http://localhost). Sur iPad, ouvrir le fichier depuis Fichiers ou iCloud ne suffit pas : il faut une adresse en https.";
+    return;
+  }
+  $('#bStart').textContent = 'Chargement…';
+  try{ await camera(); }
+  catch(e){
+    err.style.display = 'block';
+    err.textContent = e.message + "\n\n(détail technique : " + (e.name||'') + ", étape " + journal.length + ")";
+    $('#bStart').textContent = 'Réessayer';
+    $('#bCopie').style.display = '';
+    return;
+  }
+  try{ parle('Prêt.'); }catch(e){}
+  $('#home').classList.remove('on');
+  $('#cal').classList.add('on');
+  dessine(); affiche();
+  if(cfg.cal){ $('#camMsg').textContent = "Un calibrage existe déjà. « Plus tard » l'utilise tel quel."; }
+};
+
+/* garde l'écran allumé */
+async function veille(){ try{ if('wakeLock' in navigator) await navigator.wakeLock.request('screen'); }catch(e){} }
+document.addEventListener('visibilitychange', ()=>{ if(!document.hidden) veille(); });
+veille();
+dessine();
+window.__demarre = true;
+if(location.protocol === 'file:'){
+  $('#homeErr').style.display = 'block';
+  $('#homeErr').textContent = "Ouvrez cette page depuis une adresse en https:// — en local, iPad interdit la caméra.";
+}
+</script>
+</body>
+</html>
