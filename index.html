@@ -62,6 +62,19 @@ button{font:inherit;color:inherit}
 .pt{position:fixed;width:26px;height:26px;margin:-13px 0 0 -13px;border-radius:50%;
   border:2px solid var(--pick);background:rgba(255,196,77,.22);pointer-events:none;z-index:20;display:none}
 .pt.on{display:block}
+.manette{position:fixed;right:14px;bottom:14px;z-index:22;display:none;align-items:flex-end;gap:12px}
+.manette.on{display:flex}
+body.avecManette .grid{padding-bottom:clamp(150px,20vh,190px)}
+.okb{width:clamp(64px,15vw,84px);height:clamp(64px,15vw,84px);border-radius:50%;border:2px solid var(--pick);
+  background:var(--pick);color:var(--pickInk);font-weight:800;font-size:18px;touch-action:none;
+  box-shadow:0 6px 18px rgba(0,0,0,.4)}
+.okb:active{transform:scale(.94)}
+.stick{position:relative;width:clamp(112px,26vw,150px);height:clamp(112px,26vw,150px);border-radius:50%;
+  background:rgba(24,35,51,.94);border:2px solid var(--line);touch-action:none;box-shadow:0 6px 18px rgba(0,0,0,.4)}
+.stick .ring{position:absolute;left:50%;top:50%;width:44%;height:44%;margin:-22% 0 0 -22%;border-radius:50%;border:1px dashed var(--line)}
+.knob{position:absolute;left:50%;top:50%;width:42%;height:42%;margin:-21% 0 0 -21%;border-radius:50%;
+  background:var(--pick);border:2px solid var(--pick);box-shadow:0 3px 10px rgba(0,0,0,.45)}
+.knob.hot{background:var(--ok);border-color:var(--ok)}
 
 /* bas de page */
 .tip{padding:0 12px 8px;font-size:12.5px;color:var(--dim);text-align:center;line-height:1.4}
@@ -73,6 +86,10 @@ button{font:inherit;color:inherit}
 .full h1{font-size:clamp(22px,4.4vw,32px);margin:0 0 8px;letter-spacing:-.02em}
 .full p{color:var(--dim);line-height:1.6;font-size:15px;margin:0 0 12px}
 .full ol{color:var(--dim);line-height:1.75;font-size:14.5px;padding-left:20px}
+.grp{display:flex;flex-wrap:wrap;gap:8px}
+.grp button{flex:1 1 45%;padding:14px 10px;border-radius:12px;border:2px solid var(--line);
+  background:var(--surface);color:var(--ink);font-size:15px;font-weight:600;cursor:pointer}
+.grp button[aria-pressed=true]{border-color:var(--pick);background:var(--surface2);color:var(--pick)}
 .full b{color:var(--ink)}
 .big{width:100%;padding:17px;border-radius:14px;border:none;background:var(--pick);color:var(--pickInk);
   font-size:18px;font-weight:800;cursor:pointer;margin-top:8px}
@@ -188,13 +205,36 @@ window.addEventListener('DOMContentLoaded', function(){
 <div class="tip" id="tip">Regardez une case et gardez-la des yeux pour la choisir. La case du milieu ne fait rien : c'est le repos.</div>
 
 <div class="pt" id="pt"></div>
+<div class="manette" id="manette">
+  <button class="okb" id="okb">OK</button>
+  <div class="stick" id="stick"><div class="ring"></div><div class="knob" id="knob"></div></div>
+</div>
 <div class="hold" id="hold"><video id="vid" playsinline muted autoplay></video></div>
 <div class="cible" id="cible"></div>
 
 <!-- accueil -->
 <div class="full on" id="home"><div class="in">
-  <h1>Écrire avec le regard</h1>
-  <p>Neuf grandes cases. On regarde une case, on la garde des yeux une seconde, elle se choisit. Pas de clignement, pas de bouton.</p>
+  <h1>Parler avec l'écran</h1>
+  <p>Neuf grandes cases. On désigne une case, on la valide, la lettre s'écrit. Choisissez d'abord comment vous voulez commander.</p>
+
+  <div class="fld">
+    <label>Comment commander</label>
+    <div class="grp" id="grpMode">
+      <button data-v="yeux">Les yeux</button>
+      <button data-v="mains">Les mains</button>
+      <button data-v="clavier">Clavier ou souris</button>
+      <button data-v="manette">Manette à l'écran</button>
+    </div>
+    <p style="font-size:13px" id="modeAide"></p>
+  </div>
+
+  <div class="fld">
+    <label>Disposition des lettres</label>
+    <div class="grp" id="grpDispo">
+      <button data-v="alpha">Alphabétique</button>
+      <button data-v="azerty">AZERTY</button>
+    </div>
+  </div>
   <div class="err" id="homeErr"></div>
   <div id="platLine" style="font-size:13px;color:var(--dim);margin:0 0 12px"></div>
   <pre id="homeLog" style="display:none"></pre>
@@ -207,7 +247,6 @@ window.addEventListener('DOMContentLoaded', function(){
   <div id="verLigne" style="font-size:12px;color:var(--dim);margin:-4px 0 10px"></div>
   <div id="profs"></div>
   <button class="big" id="bStart">Démarrer et calibrer</button>
-  <button class="big g" id="bSouris">Essayer à la souris ou au doigt, sans caméra</button>
   <button class="big g" id="bCopie" style="display:none">Copier l'adresse de cette page</button>
 </div></div>
 
@@ -246,9 +285,19 @@ window.addEventListener('DOMContentLoaded', function(){
     <p style="font-size:13px">Durée pendant laquelle il faut garder les yeux sur une case pour la choisir.</p>
   </div>
   <div class="fld">
-    <label>Stabilité du pointeur <b id="smT">0.25</b></label>
-    <input type="range" id="sm" min="0.05" max="0.7" step="0.01" value="0.25">
-    <p style="font-size:13px">Plus bas, plus stable mais plus lent à suivre.</p>
+    <label>Stabilité du pointeur <b id="smT">0.12</b></label>
+    <input type="range" id="sm" min="0.03" max="0.5" step="0.01" value="0.12">
+    <p style="font-size:13px">Plus bas, plus stable mais plus lent à suivre. Baissez-le si le point tremble.</p>
+  </div>
+  <div class="fld">
+    <label>Fermeté de la case <b id="szT">280 ms</b></label>
+    <input type="range" id="sz" min="0" max="800" step="20" value="280">
+    <p style="font-size:13px">Durée pendant laquelle le regard doit être passé sur une autre case avant qu'elle prenne la main. Montez-la si la sélection saute d'une case à l'autre.</p>
+  </div>
+  <div class="fld">
+    <label>Filtre anti-sursaut <b id="mdT">7</b></label>
+    <input type="range" id="md" min="1" max="15" step="2" value="7">
+    <p style="font-size:13px">Nombre de mesures dont on garde la médiane. Plus haut, plus stable, mais un léger retard.</p>
   </div>
   <div class="fld">
     <label>Part de la tête <b id="hwT">1.00</b></label>
@@ -257,9 +306,9 @@ window.addEventListener('DOMContentLoaded', function(){
   </div>
   <div class="fld">
     <label>Disposition des lettres</label>
-    <div style="display:flex;gap:6px">
-      <button class="big g" id="dAlpha" style="margin:0">Alphabétique</button>
-      <button class="big g" id="dAz" style="margin:0">AZERTY</button>
+    <div class="grp" id="grpDispo2">
+      <button data-v="alpha">Alphabétique</button>
+      <button data-v="azerty">AZERTY</button>
     </div>
     <p style="font-size:13px">Alphabétique : A B C, D E F, G H I… AZERTY : A Z E, R T Y, U I O… comme un clavier d'ordinateur.</p>
   </div>
@@ -304,13 +353,13 @@ window.addEventListener('DOMContentLoaded', function(){
    Un seul fichier. Aucune autre option, volontairement.
    ===================================================================== */
 
-const VERSION = '1.3';
-const VERSION_DATE = '22 août 2026';
+const VERSION = '1.4';
+const VERSION_DATE = '22/08/2026 à 16h32';
 const $ = s => document.querySelector(s);
 const clamp = (v,a,b) => Math.max(a, Math.min(b, v));
 
 /* ---------- 1. Réglages ---------- */
-const DEF = { dwell:900, smooth:.25, headW:1, showPt:true, son:true, voix:'', cal:null, clavier:'alpha', prenom:'',
+const DEF = { mode:'yeux', dwell:900, smooth:.12, stabZone:280, median:7, headW:1, showPt:true, son:true, voix:'', cal:null, clavier:'alpha', prenom:'',
               precis:true, derive:true, biais:{x:0,y:0}, qualite:null,
               clign:false, seuilOeil:.45, dureeClign:400 };
 let cfg = { ...DEF };
@@ -338,7 +387,7 @@ let texte = '';
 let profils = [];
 try{ profils = JSON.parse(localStorage.getItem('regard_profils')||'[]'); }catch(e){}
 const saveProfils = ()=>{ try{ localStorage.setItem('regard_profils', JSON.stringify(profils)); }catch(e){} };
-const CLES = ['cal','biais','qualite','dwell','smooth','headW','clign','seuilOeil','dureeClign','clavier','voix'];
+const CLES = ['cal','biais','qualite','dwell','smooth','stabZone','median','headW','mode','clign','seuilOeil','dureeClign','clavier','voix'];
 function profilDepuisCfg(nom){
   const p = { id:'p'+Date.now().toString(36), nom:nom, date:Date.now() };
   CLES.forEach(k => p[k] = JSON.parse(JSON.stringify(cfg[k] === undefined ? null : cfg[k])));
@@ -638,17 +687,20 @@ function ajuste(ech, cle){
 function boucle(){
   requestAnimationFrame(boucle);
   const v = $('#vid');
-  if(!modele || v.readyState < 2 || v.currentTime === dernier) return;
+  if(v.readyState < 2 || v.currentTime === dernier) return;
   dernier = v.currentTime;
+  images++;
+  const t0 = performance.now();
+  if(t0 - tIps > 1000){ ips = images; images = 0; tIps = t0; }
+
+  if(cfg.mode === 'mains'){ if(modeleMain) boucleMain(t0); return; }
+  if(!modele) return;
 
   let r; try{ r = modele.detectForVideo(v, performance.now()); }catch(e){ return; }
   const lm = r.faceLandmarks && r.faceLandmarks[0];
   const bs = r.faceBlendshapes && r.faceBlendshapes[0] && r.faceBlendshapes[0].categories;
 
-  images++;
-  const now = performance.now();
-  if(now - tIps > 1000){ ips = images; images = 0; tIps = now; }
-
+  const now = t0;
   if(!lm){ if(vu){ vu = false; etat(false, 'visage non détecté'); } brut = null; return; }
   if(!vu){ vu = true; etat(true, 'visage détecté'); }
   $('#cam').classList.add('ok');
@@ -680,12 +732,7 @@ function boucle(){
   // yeux fermés hors mode clignement : la position de l'iris n'a plus de sens, on gèle
   if(ferme) return;
 
-  const p = versEcran(m);
-  const saut = Math.hypot(p.x - gx, p.y - gy);
-  const a = saut > .12 ? Math.min(.8, cfg.smooth*3) : cfg.smooth;   // saccade : on suit vite ; fixation : on stabilise
-  gx += (p.x - gx) * a;
-  gy += (p.y - gy) * a;
-  suivi(now);
+  pointe(versEcran(m), now);
 }
 function etat(ok, t){ $('#dot').classList.toggle('on', ok); $('#stTxt').textContent = t; }
 
@@ -810,7 +857,28 @@ function versEcran(m){
 }
 
 /* ---------- 6. Choix par fixation ---------- */
+/* Deux filtres en série : une médiane glissante qui supprime les sursauts isolés,
+   puis un lissage exponentiel. Le lissage s'ouvre franchement sur une saccade,
+   pour ne pas traîner quand la personne change volontairement de case. */
+const fifo = [];
+function pointe(p, now){
+  fifo.push(p);
+  while(fifo.length > Math.max(3, cfg.median)) fifo.shift();
+  const md = k => fifo.map(e=>e[k]).sort((a,b)=>a-b)[Math.floor(fifo.length/2)];
+  const cible = { x: md('x'), y: md('y') };
+  const saut = Math.hypot(cible.x - gx, cible.y - gy);
+  const a = saut > .22 ? Math.min(.9, cfg.smooth*6) : cfg.smooth;
+  gx += (cible.x - gx) * a;
+  gy += (cible.y - gy) * a;
+  suivi(now);
+}
 let zone = -1, depuis = 0, gele = 0, rects = [], cadre = null;
+let candidat = -1, depuisCand = 0;
+function poseZone(i, now){
+  zone = i; candidat = i; depuis = now || performance.now();
+  tuiles.forEach((t,k) => { t.classList.toggle('look', k===i);
+    if(k!==i){ t.firstChild.style.height = '0'; t.classList.remove('arm'); } });
+}
 function mesure(){
   cadre = $('#grid').getBoundingClientRect();
   rects = tuiles.map(t => t.getBoundingClientRect());
@@ -829,11 +897,13 @@ function suivi(now){
   rects.forEach((r,i) => { if(px>=r.left && px<=r.right && py>=r.top && py<=r.bottom) sur = i; });
 
   if(sur !== zone){
-    zone = sur; depuis = now;
-    tuiles.forEach((t,i) => { t.classList.toggle('look', i===sur);
-      if(i!==sur){ t.firstChild.style.height = '0'; t.classList.remove('arm'); } });
+    // il faut rester sur la nouvelle case un court instant avant qu'elle prenne la main
+    if(sur !== candidat){ candidat = sur; depuisCand = now; return; }
+    if(now - depuisCand < cfg.stabZone) return;
+    poseZone(sur, now);
     return;
   }
+  candidat = sur;
   if(sur < 0 || now < gele) return;
   const z = liste[sur];
   if(!z || (z.repos && !z.retour)){ tuiles[sur].firstChild.style.height = '0'; return; }
@@ -871,6 +941,8 @@ function choisir(i){
 function syncSet(){
   $('#dw').value = cfg.dwell;  $('#dwT').textContent = cfg.dwell + ' ms';
   $('#sm').value = cfg.smooth; $('#smT').textContent = (+cfg.smooth).toFixed(2);
+  $('#sz').value = cfg.stabZone; $('#szT').textContent = cfg.stabZone + ' ms';
+  $('#md').value = cfg.median;  $('#mdT').textContent = cfg.median;
   $('#hw').value = cfg.headW;  $('#hwT').textContent = (+cfg.headW).toFixed(2);
   $('#showPt').checked = cfg.showPt; $('#son').checked = cfg.son;
   $('#precis').checked = cfg.precis; $('#derive').checked = cfg.derive;
@@ -879,8 +951,7 @@ function syncSet(){
   $('#dc').value = cfg.dureeClign; $('#dcT').textContent = cfg.dureeClign + ' ms';
   $('#so').value = cfg.seuilOeil;  $('#soT').textContent = (+cfg.seuilOeil).toFixed(2);
   $('#oeilMark').style.left = (cfg.seuilOeil*100) + '%';
-  $('#dAlpha').style.borderColor = cfg.clavier === 'alpha'  ? 'var(--pick)' : 'var(--line)';
-  $('#dAz').style.borderColor    = cfg.clavier === 'azerty' ? 'var(--pick)' : 'var(--line)';
+  marque('grpDispo2', 'clavier');
   $('#profNom').textContent = cfg.prenom || '—';
   $('#tip').textContent = cfg.clign
     ? "Regardez une case, puis fermez les yeux un instant pour la choisir. La case du milieu ne fait rien."
@@ -889,12 +960,13 @@ function syncSet(){
 }
 $('#dw').oninput = e => { cfg.dwell = +e.target.value; syncSet(); };
 $('#sm').oninput = e => { cfg.smooth = +e.target.value; syncSet(); };
+$('#sz').oninput = e => { cfg.stabZone = +e.target.value; syncSet(); };
+$('#md').oninput = e => { cfg.median = +e.target.value; fifo.length = 0; syncSet(); };
 $('#hw').oninput = e => { cfg.headW = +e.target.value; syncSet(); };
 $('#showPt').onchange = e => { cfg.showPt = e.target.checked; syncSet(); };
 $('#son').onchange = e => { cfg.son = e.target.checked; syncSet(); };
 $('#precis').onchange = e => { cfg.precis = e.target.checked; syncSet(); };
-$('#dAlpha').onclick = ()=>{ cfg.clavier='alpha'; syncSet(); niveau=0; groupe=null; dessine(); };
-$('#dAz').onclick    = ()=>{ cfg.clavier='azerty'; syncSet(); niveau=0; groupe=null; dessine(); };
+groupe1('grpDispo2', 'clavier', ()=>{ marque('grpDispo','clavier'); niveau=0; groupe=null; dessine(); });
 $('#bProfSave').onclick = ()=>{
   const p = profils.find(q => q.nom === cfg.prenom);
   if(p){ CLES.forEach(k => p[k] = JSON.parse(JSON.stringify(cfg[k] === undefined ? null : cfg[k])));
@@ -960,13 +1032,6 @@ $('#bDiag').onclick = ()=>{
 addEventListener('error', e => etape('ERREUR : ' + (e.message||e.type)));
 addEventListener('unhandledrejection', e => etape('ERREUR : ' + ((e.reason && e.reason.message) || e.reason)));
 
-$('#bSouris').onclick = ()=>{
-  sansCam = true;
-  $('#home').classList.remove('on');
-  $('#tip').textContent = "Mode sans caméra : cliquez ou touchez une case pour la choisir.";
-  etat(true, 'mode souris');
-  dessine(); affiche();
-};
 $('#bCopie').onclick = async ()=>{
   const a = location.href;
   try{ await navigator.clipboard.writeText(a); alert("Adresse copiée.\n\nOuvrez Safari, collez-la dans la barre d'adresse, puis appuyez sur Démarrer."); }
@@ -975,6 +1040,15 @@ $('#bCopie').onclick = async ()=>{
 async function demarrer(avecProfil){
   const err = $('#homeErr');
   err.style.display = 'none'; journal.length = 0;
+
+  applique();                                    // manette, indicateurs, aide
+  if(cfg.mode === 'clavier' || cfg.mode === 'manette'){
+    $('#home').classList.remove('on');
+    dessine(); affiche(); poseZone(4);
+    etat(true, cfg.mode === 'clavier' ? 'clavier' : 'manette');
+    return;
+  }
+
   etape('Appareil : ' + navigator.userAgent);
   etape('Page sécurisée (https) : ' + (isSecureContext ? 'oui' : 'NON'));
   if(!navigator.mediaDevices || !isSecureContext){
@@ -983,7 +1057,7 @@ async function demarrer(avecProfil){
     return;
   }
   $('#bStart').textContent = 'Chargement…';
-  try{ await camera(); }
+  try{ await camera(); if(cfg.mode === 'mains') await cameraMain(); }
   catch(e){
     err.style.display = 'block';
     err.textContent = e.message + "\n\n(détail technique : " + (e.name||'') + ", étape " + journal.length + ")";
@@ -994,6 +1068,10 @@ async function demarrer(avecProfil){
   try{ parle('Prêt.'); }catch(e){}
   $('#home').classList.remove('on');
   dessine(); affiche();
+  if(cfg.mode === 'mains'){                     // aucun calibrage nécessaire
+    $('#tip').textContent = "Levez la main devant la caméra : elle déplace le pointeur. Gardez-le sur une case pour la choisir.";
+    return;
+  }
   if(avecProfil && cfg.cal){                    // profil chargé : on écrit tout de suite
     $('#tip').textContent = 'Bonjour ' + (cfg.prenom || '') + '. Regardez une case pour la choisir.';
     return;
@@ -1003,9 +1081,133 @@ async function demarrer(avecProfil){
 }
 $('#bStart').onclick = ()=>demarrer(false);
 
+
+/* ---------- 8. Les quatre façons de commander ---------- */
+
+const AIDE = {
+  yeux:    "Le regard désigne la case. Demande un calibrage de trente secondes et une tête à peu près stable.",
+  mains:   "La main devant la caméra désigne la case, comme un pointeur. Aucun calibrage.",
+  clavier: "Les flèches du clavier déplacent la sélection, Entrée ou Espace valide. La souris fonctionne aussi : cliquez une case.",
+  manette: "Une manette et un bouton OK en bas à droite, au doigt ou à la souris. Aucun calibrage."
+};
+function groupe1(id, cle, apres){
+  const g = $('#' + id);
+  [...g.children].forEach(b => {
+    b.onclick = ()=>{ cfg[cle] = b.dataset.v; save(); marque(id, cle); if(apres) apres(); };
+  });
+  marque(id, cle);
+}
+function marque(id, cle){
+  const g = $('#' + id);
+  [...g.children].forEach(b => b.setAttribute('aria-pressed', cfg[cle] === b.dataset.v));
+}
+
+/* --- déplacement discret, pour le clavier et la manette --- */
+function bouge(dx, dy){
+  if(zone < 0){ poseZone(4); bip(600,25); return; }
+  let r = Math.floor(zone/3), c = zone % 3;
+  r = (r + dy + 3) % 3; c = (c + dx + 3) % 3;
+  poseZone(r*3 + c); bip(dy ? 520 : 660, 26);
+}
+function valide(){ if(zone >= 0) choisir(zone); }
+
+/* --- clavier physique --- */
+addEventListener('keydown', e => {
+  if(cfg.mode !== 'clavier' || $('#home').classList.contains('on')) return;
+  const k = e.key;
+  if(k === 'ArrowLeft'){ bouge(-1,0); e.preventDefault(); }
+  else if(k === 'ArrowRight'){ bouge(1,0); e.preventDefault(); }
+  else if(k === 'ArrowUp'){ bouge(0,-1); e.preventDefault(); }
+  else if(k === 'ArrowDown'){ bouge(0,1); e.preventDefault(); }
+  else if(k === 'Enter' || k === ' '){ valide(); e.preventDefault(); }
+});
+
+/* --- manette à l'écran --- */
+let jdx = 0, jdy = 0, jTenu = false, jArme = true, jRaf = null;
+function jBoucle(){
+  if(!jTenu){ jRaf = null; return; }
+  const m = Math.max(Math.abs(jdx), Math.abs(jdy));
+  $('#knob').classList.toggle('hot', m >= .45);
+  if(m < .45) jArme = true;
+  else if(jArme){ jArme = false;
+    if(Math.abs(jdx) >= Math.abs(jdy)) bouge(jdx > 0 ? 1 : -1, 0);
+    else bouge(0, jdy > 0 ? 1 : -1);
+  }
+  jRaf = requestAnimationFrame(jBoucle);
+}
+function jPos(e){
+  const r = $('#stick').getBoundingClientRect();
+  const rad = r.width/2;
+  let dx = (e.clientX - r.left - rad)/rad, dy = (e.clientY - r.top - rad)/rad;
+  const m = Math.hypot(dx, dy); if(m > 1){ dx /= m; dy /= m; }
+  jdx = dx; jdy = dy;
+  $('#knob').style.transform = 'translate(' + (dx*rad*.5) + 'px,' + (dy*rad*.5) + 'px)';
+}
+function jFin(){ jTenu = false; jdx = jdy = 0; jArme = true;
+  const k = $('#knob'); k.style.transform = 'none'; k.classList.remove('hot'); }
+function initManette(){
+  const st = $('#stick'), ok = $('#okb');
+  st.addEventListener('pointerdown', e => { e.preventDefault(); st.setPointerCapture(e.pointerId);
+    jTenu = true; jArme = true; jPos(e); if(!jRaf) jRaf = requestAnimationFrame(jBoucle); });
+  st.addEventListener('pointermove', e => { if(jTenu) jPos(e); });
+  ['pointerup','pointercancel','pointerleave'].forEach(ev => st.addEventListener(ev, jFin));
+  ok.addEventListener('pointerdown', e => { e.preventDefault(); valide(); });
+}
+
+/* --- détection des mains --- */
+let modeleMain = null, mainVue = false;
+async function cameraMain(){
+  etape('4. Téléchargement du module de détection…');
+  const V = await Promise.race([
+    import('https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.14/vision_bundle.mjs'),
+    attend(30000, 'téléchargement du module')]);
+  etape('5. Module chargé. Préparation…');
+  const fs = await Promise.race([
+    V.FilesetResolver.forVisionTasks('https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.14/wasm'),
+    attend(30000, 'préparation du moteur')]);
+  const opt = {
+    baseOptions:{ modelAssetPath:'https://storage.googleapis.com/mediapipe-models/hand_landmarker/hand_landmarker/float16/1/hand_landmarker.task', delegate:'GPU' },
+    runningMode:'VIDEO', numHands:2
+  };
+  etape('6. Chargement du modèle des mains…');
+  try{ modeleMain = await Promise.race([V.HandLandmarker.createFromOptions(fs, opt), attend(40000,'modèle (GPU)')]); }
+  catch(e){ etape('   GPU indisponible, essai sans accélération…');
+    opt.baseOptions.delegate = 'CPU';
+    modeleMain = await Promise.race([V.HandLandmarker.createFromOptions(fs, opt), attend(60000,'modèle (CPU)')]); }
+  etape('7. Prêt.');
+}
+const MARGE = .22;    // la main n'a pas besoin d'atteindre les bords de l'image
+function boucleMain(now){
+  const v = $('#vid');
+  let r; try{ r = modeleMain.detectForVideo(v, now); }catch(e){ return; }
+  const L = (r.landmarks || []).filter(Boolean);
+  if(!L.length){ if(mainVue){ mainVue = false; etat(false, 'main non détectée'); } return; }
+  if(!mainVue){ mainVue = true; etat(true, 'main détectée'); }
+  const h = L[0];
+  const cx = (h[0].x + h[5].x + h[17].x)/3, cy = (h[0].y + h[5].y + h[17].y)/3;
+  const px = clamp((1 - cx - MARGE) / (1 - 2*MARGE), 0, 1);   // image non miroir : on inverse
+  const py = clamp((cy - MARGE) / (1 - 2*MARGE), 0, 1);
+  pointe({ x:px, y:py }, now);
+}
+
+function applique(){
+  document.body.classList.toggle('avecManette', cfg.mode === 'manette');
+  $('#manette').classList.toggle('on', cfg.mode === 'manette');
+  $('#modeAide').textContent = AIDE[cfg.mode] || '';
+  const t = { yeux:"Regardez une case et gardez-la des yeux pour la choisir. La case du milieu ne fait rien.",
+              mains:"La main devant la caméra déplace le pointeur. Gardez-le sur une case pour la choisir.",
+              clavier:"Flèches du clavier pour se déplacer, Entrée ou Espace pour valider. Le clic fonctionne aussi.",
+              manette:"Poussez la manette pour vous déplacer, OK pour valider." }[cfg.mode];
+  $('#tip').textContent = t || '';
+}
+
 /* garde l'écran allumé */
 async function veille(){ try{ if('wakeLock' in navigator) await navigator.wakeLock.request('screen'); }catch(e){} }
-document.addEventListener('visibilitychange', ()=>{ if(!document.hidden) $('#verLigne').textContent = 'Version ' + VERSION + ' — ' + VERSION_DATE;
+document.addEventListener('visibilitychange', ()=>{ if(!document.hidden) groupe1('grpMode', 'mode', applique);
+groupe1('grpDispo', 'clavier', ()=>{ niveau = 0; groupe = null; dessine(); });
+initManette();
+applique();
+$('#verLigne').textContent = 'Version ' + VERSION + ' — ' + VERSION_DATE;
 listeProfils();
 veille(); });
 try{ veille(); }catch(e){}
