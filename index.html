@@ -4,6 +4,9 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, user-scalable=no">
 <meta name="theme-color" content="#0F1620">
+<meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
+<meta http-equiv="Pragma" content="no-cache">
+<meta http-equiv="Expires" content="0">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
@@ -304,6 +307,65 @@ body.hasStick .grid, body.hasStick .gaze{padding-bottom:clamp(150px,20vh,190px)}
 </style>
 </head>
 <body>
+
+<script>
+/* Filet posé avant le script principal : affiche à l'écran toute erreur,
+   identifie la plateforme, et repère les navigateurs intégrés aux applications
+   où iOS interdit la caméra. */
+window.__demarre = false;
+window.__dis = function(t){
+  var e = document.getElementById('bootErr');
+  if(!e){ return; }
+  e.style.display = 'block';
+  e.textContent = (e.textContent ? e.textContent + '\n' : '') + t;
+};
+window.addEventListener('error', function(ev){
+  window.__dis('Erreur : ' + (ev.message || ev.type) + (ev.lineno ? ' (ligne ' + ev.lineno + ')' : ''));
+});
+window.__ios = function(){
+  var u = navigator.userAgent;
+  return /iPad|iPhone|iPod/.test(u) || (/Macintosh/.test(u) && navigator.maxTouchPoints > 1);
+};
+window.__intApp = function(){
+  var u = navigator.userAgent;
+  if(window.__ios()) return !(/Version\/\d/.test(u) && /Safari\//.test(u));
+  if(/Android/.test(u)) return /;\s*wv\)/.test(u);
+  return false;
+};
+window.__plateforme = function(){
+  var u = navigator.userAgent, os = 'inconnu', nav = 'inconnu';
+  if(window.__ios()) os = 'iPad / iPhone';
+  else if(/Android/.test(u)) os = 'Android';
+  else if(/Windows NT 10/.test(u)) os = 'Windows 10 ou 11';
+  else if(/Windows/.test(u)) os = 'Windows';
+  else if(/Mac OS X/.test(u)) os = 'macOS';
+  else if(/Linux/.test(u)) os = 'Linux';
+  if(/Edg\//.test(u)) nav = 'Edge';
+  else if(/SamsungBrowser/.test(u)) nav = 'Samsung Internet';
+  else if(/Firefox\//.test(u)) nav = 'Firefox';
+  else if(/OPR\//.test(u)) nav = 'Opera';
+  else if(/Chrome\//.test(u)) nav = 'Chrome';
+  else if(/Safari\//.test(u) && /Version\//.test(u)) nav = 'Safari';
+  return { os: os, nav: nav };
+};
+window.addEventListener('DOMContentLoaded', function(){
+  var p = window.__plateforme(), l = document.getElementById('platLine');
+  if(l) l.textContent = 'Détecté : ' + p.os + ' · ' + p.nav +
+    ' · page sécurisée ' + (window.isSecureContext ? 'oui' : 'NON') +
+    (window.__intApp() ? ' · navigateur intégré à une application' : '');
+  if(window.__intApp()){
+    window.__dis(window.__ios()
+      ? "Cette page est ouverte dans le navigateur intégré d'une application. iOS y interdit la caméra, sans exception.\n\nOuvrez la même adresse dans Safari : menu « … » ou Partager → Ouvrir dans Safari."
+      : "Cette page est ouverte dans le navigateur intégré d'une application, où la caméra est souvent bloquée.\n\nOuvrez la même adresse dans Chrome.");
+  }
+  if(location.protocol === 'file:'){
+    window.__dis("Page ouverte comme fichier local : la caméra est interdite. Il faut une adresse en https://");
+  }
+  setTimeout(function(){
+    if(!window.__demarre) window.__dis("Le script principal ne s'est pas lancé.");
+  }, 2500);
+});
+</script>
 
 <div class="topbar">
   <div class="brand">Parle avec moi <span id="whoName">·</span></div>
@@ -607,7 +669,10 @@ body.hasStick .grid, body.hasStick .gaze{padding-bottom:clamp(150px,20vh,190px)}
     <div class="step on" id="s1">
       <h1>Parle avec moi</h1>
       <p id="s1p">Choisissez un profil, ou créez-en un nouveau.</p>
-      <div class="err" id="startErr"></div>
+      <div class="err" id="bootErr" style="display:none;white-space:pre-wrap"></div>
+    <div class="err" id="startErr"></div>
+    <div class="hint" id="platLine" style="margin:-4px 0 10px"></div>
+    <div class="hint" id="verHome" style="margin:0 0 14px"></div>
       <div id="profList"></div>
       <button class="skip" id="btnHelp">Mode d'emploi</button>
       <button class="skip" id="btnManage">Renommer ou supprimer des profils</button>
@@ -673,7 +738,7 @@ body.hasStick .grid, body.hasStick .gaze{padding-bottom:clamp(150px,20vh,190px)}
   </div>
 </div>
 
-<script type="module">
+<script>
 /* =====================================================================
    Parle avec moi — clavier à balayage piloté par le clignement des yeux
    Fonctionne dans un navigateur : iPad, Android, macOS, Windows, Linux.
@@ -906,22 +971,25 @@ const escape = s => s.replace(/[&<>]/g, m=>({'&':'&amp;','<':'&lt;','>':'&gt;'}[
 
 /* ---------- 6. Parole ---------- */
 let voices = [];
+const SS = ('speechSynthesis' in window) ? window.speechSynthesis : null;
 function loadVoices(){
-  voices = speechSynthesis.getVoices().filter(v=>/^fr/i.test(v.lang));
-  if(!voices.length) voices = speechSynthesis.getVoices();
+  if(!SS) return;
+  voices = SS.getVoices().filter(v=>/^fr/i.test(v.lang));
+  if(!voices.length) voices = SS.getVoices();
   const sel = $('#voice'); sel.innerHTML='';
   voices.forEach((v,i)=>{ const o=document.createElement('option'); o.value=v.voiceURI; o.textContent=`${v.name} (${v.lang})`; sel.appendChild(o); });
   if(cfg.voice) sel.value = cfg.voice;
 }
-speechSynthesis.onvoiceschanged = loadVoices; loadVoices();
+if(SS) SS.onvoiceschanged = loadVoices;
+try{ loadVoices(); }catch(e){}
 function speak(t, quick){
   if(!t || !t.trim()) return;
-  if(quick) speechSynthesis.cancel();
+  if(quick) SS && SS.cancel();
   const u = new SpeechSynthesisUtterance(t);
   const v = voices.find(v=>v.voiceURI===cfg.voice) || voices[0];
   if(v){ u.voice=v; u.lang=v.lang; } else u.lang='fr-FR';
   u.rate = quick ? 1.6 : cfg.rate;
-  speechSynthesis.speak(u);
+  SS && SS.speak(u);
 }
 /* petit bip WebAudio */
 let ac=null;
@@ -963,7 +1031,7 @@ async function voiceOut(t){
   learnText(t);
   const b = clips.get(bankKey(t));
   const el = $('#clipEl');
-  if(b){ speechSynthesis.cancel(); if(lastUrl) URL.revokeObjectURL(lastUrl);
+  if(b){ SS && SS.cancel(); if(lastUrl) URL.revokeObjectURL(lastUrl);
          lastUrl = URL.createObjectURL(b); el.src = lastUrl;
          try{ await el.play(); return; }catch(e){} }
   if(cfg.vsUrl){
@@ -1812,6 +1880,11 @@ function ensureStartOverlay(){
   const d = document.createElement('div'); d.innerHTML = START_HTML;
   document.body.appendChild(d.firstElementChild);
   bindStart();
+window.__demarre = true;
+(function(){
+  var v = document.getElementById('verHome');
+  if(v) v.textContent = 'Parle avec moi — version ' + VERSION + ' — ' + VERSION_DATE;
+})();
 }
 
 /* ---------- 10 bis. Profils ---------- */
@@ -2465,8 +2538,8 @@ function trainDone(){
 }
 
 /* ---------- Mode d'emploi intégré ---------- */
-const VERSION = '2.0';
-const VERSION_DATE = '21 août 2026';
+const VERSION = '2.1';
+const VERSION_DATE = '22/08/2026 à 17h20';
 const HELP = [
   ['Démarrer', [
     "À l'ouverture, choisissez un profil dans la liste, ou créez-en un.",
@@ -2857,12 +2930,45 @@ async function ensureModels(){
   if(!needFace && !needHand){ cfg.mode='touch'; return true; }
   cfg.mode = 'cam';
   try{
-    if(!landmarker) await initCam();
+    if(!landmarker){
+      try{ await initCam(); }
+      catch(e1){
+        if(e1 && /Overconstrained|NotFound/.test(e1.name||'')){
+          camStream = await navigator.mediaDevices.getUserMedia({ video:true, audio:false });
+          const v = $('#vid'); v.srcObject = camStream; v.setAttribute('playsinline',''); v.muted = true;
+          v.play().catch(()=>{});
+          await initCam();
+        } else throw e1;
+      }
+    }
     if(needHand && !hander) await initHand();
   }catch(e){
-    if(err){ err.style.display='block';
-      err.textContent = "Détection indisponible : "+e.message+
-        " — vérifiez l'autorisation caméra, et qu'une connexion est disponible au premier lancement."; }
+    if(err){
+      err.style.display = 'block'; err.style.whiteSpace = 'pre-wrap';
+      const nom = e.name || '';
+      let t;
+      if((nom === 'NotAllowedError' || nom === 'SecurityError') && window.__intApp())
+        t = "Cette page tourne dans le navigateur intégré d'une application, où la caméra est bloquée.\n\n"
+          + (window.__ios() ? "Ouvrez la même adresse dans Safari : menu « … » ou Partager → Ouvrir dans Safari."
+                            : "Ouvrez la même adresse dans Chrome.");
+      else if((nom === 'NotAllowedError' || nom === 'SecurityError') && window.__ios())
+        t = "L'accès à la caméra a été refusé.\n\n"
+          + "• Touchez « aA » à gauche de l'adresse → Réglages pour ce site web → Caméra → Autoriser, puis rechargez.\n"
+          + "• Vérifiez aussi Réglages iOS → Safari → Caméra.";
+      else if(nom === 'NotAllowedError' || nom === 'SecurityError')
+        t = "L'accès à la caméra a été refusé.\n\n"
+          + "• Cliquez sur le cadenas à gauche de l'adresse → Caméra → Autoriser, puis rechargez.\n"
+          + "• Sous Windows 11 : Paramètres → Confidentialité et sécurité → Caméra, vérifiez l'accès et celui des applications de bureau.\n"
+          + "• Sous Android : Paramètres → Applications → Chrome → Autorisations → Appareil photo.";
+      else if(nom === 'NotReadableError' || nom === 'AbortError')
+        t = "La caméra est occupée par une autre application. Fermez tout ce qui l'utilise, puis réessayez.";
+      else if(nom === 'NotFoundError' || nom === 'OverconstrainedError')
+        t = "Aucune caméra utilisable n'a été trouvée sur cet appareil.";
+      else
+        t = "Détection indisponible : " + nom + " " + (e.message||'') +
+            "\nVérifiez la connexion : les modules se téléchargent au premier lancement.";
+      err.textContent = t;
+    }
     return false;
   }
   return true;
