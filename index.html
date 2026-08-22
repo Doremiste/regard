@@ -1955,7 +1955,11 @@ function pickFromSettings(id){
   if(bound) sync2();
   loopStart(); ensureModels();
 }
+function usesCam(p){ const c = p.cfg || {};
+  return !!(c.src && (c.src.eyes || c.src.head || c.src.hand)) ||
+         !!(c.val && (c.val.blink || c.val.brow || c.val.jaw || c.val.grip)); }
 function refreshProfiles(){
+  profiles.sort((a,b) => (usesCam(b)?1:0) - (usesCam(a)?1:0));
   const a = $('#profList'); if(a) paintProfiles(a, pickFromStart, profEdit);
   const b = $('#profBtns'); if(b) paintProfiles(b, pickFromSettings, true);
   const P = profiles.find(x=>x.id===cfg.profileId);
@@ -2534,8 +2538,8 @@ function trainDone(){
 }
 
 /* ---------- Mode d'emploi intégré ---------- */
-const VERSION = '2.3';
-const VERSION_DATE = '22/08/2026 à 18h05';
+const VERSION = '2.4';
+const VERSION_DATE = '22/08/2026 à 18h20';
 const HELP = [
   ['Démarrer', [
     "À l'ouverture, choisissez un profil dans la liste, ou créez-en un.",
@@ -3008,8 +3012,19 @@ async function launch(){
   try{ clips = await dbAll(); }catch(e){}          // le reste ensuite
   return true;
 }
+/* Au tout premier lancement, on crée un profil caméra prêt à l'emploi,
+   pour ne pas démarrer par défaut sur un mode sans détection. */
+function profilParDefaut(){
+  if(profiles.length) return;
+  cfg.src = { eyes:true, head:true, hand:false };
+  cfg.val = { blink:true, brow:false, jaw:false, grip:false, touch:true };
+  cfg.nav = 'move'; cfg.kb = 'big'; cfg.mode = 'cam'; cfg.repeatMove = false;
+  applySize(); applySpeed();
+  newProfile('Caméra — yeux et tête');
+}
 /* écran d'accueil */
 function bindStart(){
+  profilParDefaut();
   refreshProfiles();
   $('#btnHelp').addEventListener('click', helpOpen);
   $('#btnManage').addEventListener('click', ()=>{
@@ -3017,9 +3032,8 @@ function bindStart(){
     $('#btnManage').textContent = profEdit ? 'Terminer' : 'Renommer ou supprimer des profils';
     refreshProfiles();
   });
-  if(!profiles.length){
-    $('#s1p').textContent = "Deux minutes de réglage guidé, une seule fois, et c'est prêt.";
-    $('#btnNew').textContent = 'Créer mon profil';
+  if(profiles.length === 1 && usesCam(profiles[0])){
+    $('#s1p').textContent = "Un profil caméra est prêt : touchez-le pour démarrer. « Nouveau profil » permet d'en régler un sur mesure.";
   }
   $('#btnNew').addEventListener('click', ()=>{
     $('#c_eyes').checked=cfg.src.eyes; $('#c_head').checked=cfg.src.head; $('#c_hand').checked=cfg.src.hand;
