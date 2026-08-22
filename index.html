@@ -1430,7 +1430,7 @@ function zoneHi(){
   });
 }
 function zoneMove(dx,dy){
-  if(!gNodes.length) return;
+  if(!gNodes.length || !gSlots.length) return;
   let r = Math.floor(gHot/3), c = gHot%3;
   if(gHot<0){ r=1; c=1; }
   r = (r+dy+3)%3; c = (c+dx+3)%3;          // on fait le tour, jamais de cul-de-sac
@@ -1441,7 +1441,7 @@ function zoneMove(dx,dy){
   zoneHi();
 }
 function zoneStep(dir){
-  if(!gNodes.length) return;
+  if(!gNodes.length || !gSlots.length) return;
   gHot = ((gHot<0?0:gHot) + dir + 9) % 9;
   if(train.on) trainMove();
   beep(660,28);
@@ -1450,10 +1450,13 @@ function zoneStep(dir){
 }
 function moveCell(dx,dy){
   if(bigKB()){ zoneMove(dx,dy); return; }
+  if(!grid.length) return;                                     // clavier pas encore construit
   if(dy){ ri = (ri + dy + grid.length) % grid.length; }        // le tour se fait aussi en vertical
+  if(ri < 0 || ri >= grid.length || !grid[ri]) ri = 0;
   if(dx){ ci = ci + dx; }
   ci = Math.min(ci, grid[ri].length-1);
   if(dx){ ci = (ci + grid[ri].length) % grid[ri].length; }
+  if(ci < 0) ci = 0;
   beep(dy?520:680, 26);
   if(cfg.say){ const c=grid[ri][ci]; c && speak(c.l, true); }
   hi();
@@ -1703,6 +1706,7 @@ let level='row', ri=0, ci=0, passes=0, timer=null, paused=false, started=false;
 
 function hi(){
   if(bigKB()){ zoneHi(); return; }
+  if(!grid.length || !nodes.length) return;
   if(ri >= grid.length) ri = 0;
   if(grid[ri] && ci >= grid[ri].length) ci = 0;
   nodes.forEach((n,i)=>{
@@ -2561,8 +2565,8 @@ function trainDone(){
 }
 
 /* ---------- Mode d'emploi intégré ---------- */
-const VERSION = '2.6';
-const VERSION_DATE = '22/08/2026 à 19h05';
+const VERSION = '2.7';
+const VERSION_DATE = '22/08/2026 à 19h25';
 const HELP = [
   ['Démarrer', [
     "À l'ouverture, choisissez un profil dans la liste, ou créez-en un.",
@@ -2732,7 +2736,8 @@ let sdx=0, sdy=0, sHeld=false, sArmed=true, sNext=0, sRaf=null;
 function validateNow(long){
   if(long){ togglePause(); beep(240,110); return; }
   if(paused){ togglePause(); beep(880,60); return; }
-  if(bigKB()){ fire(gHot); return; }
+  if(bigKB()){ if(gSlots.length) fire(gHot); return; }
+  if(!grid.length) return;
   const c = grid[ri] && grid[ri][ci];
   beep(1040,80); if(c && !c.empty) c.run(); hi();
 }
