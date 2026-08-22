@@ -678,6 +678,7 @@ window.addEventListener('DOMContentLoaded', function(){
       <button class="skip" id="btnManage">Renommer ou supprimer des profils</button>
       <button class="bigbtn" id="btnNew">Nouveau profil</button>
       <button class="bigbtn ghost" id="btnAssess">Je ne sais pas quoi choisir — faire le bilan</button>
+      <button class="skip" id="btnTestCam">Tester la caméra</button>
       <button class="skip" id="btnStartTouch">Utiliser sans caméra (toucher, clic, contacteur)</button>
     </div>
 
@@ -2533,8 +2534,8 @@ function trainDone(){
 }
 
 /* ---------- Mode d'emploi intégré ---------- */
-const VERSION = '2.2';
-const VERSION_DATE = '22/08/2026 à 17h42';
+const VERSION = '2.3';
+const VERSION_DATE = '22/08/2026 à 18h05';
 const HELP = [
   ['Démarrer', [
     "À l'ouverture, choisissez un profil dans la liste, ou créez-en un.",
@@ -2925,6 +2926,16 @@ async function ensureModels(){
   if(!needFace && !needHand){ cfg.mode='touch'; return true; }
   cfg.mode = 'cam';
   try{
+    if(!camStream){                                 // le flux d'abord : la demande part immédiatement
+      try{
+        camStream = await navigator.mediaDevices.getUserMedia({
+          video:{ facingMode:'user', width:{ideal:640}, height:{ideal:480} }, audio:false });
+      }catch(e0){
+        camStream = await navigator.mediaDevices.getUserMedia({ video:true, audio:false });
+      }
+      const v = $('#vid');
+      if(v){ v.setAttribute('playsinline',''); v.muted = true; v.srcObject = camStream; v.play().catch(()=>{}); }
+    }
     if(!landmarker){
       try{ await initCam(); }
       catch(e1){
@@ -2992,9 +3003,9 @@ async function finishSetup(){
   setTimeout(()=>recenter(1), 1200);      // premier neutre pris une fois installé
 }
 async function launch(){
-  try{ clips = await dbAll(); }catch(e){}
   if(cfg.cal && cfg.cal.ax) gCal = cfg.cal;
-  if(!await ensureModels()) return false;
+  if(!await ensureModels()) return false;          // d'abord la caméra, sans attente préalable
+  try{ clips = await dbAll(); }catch(e){}          // le reste ensuite
   return true;
 }
 /* écran d'accueil */
@@ -3024,6 +3035,23 @@ function bindStart(){
     $('#btnAssess').textContent = 'Je ne sais pas quoi choisir — faire le bilan';
     if(!ok) return;
     assessStart();
+  });
+  $('#btnTestCam').addEventListener('click', async ()=>{
+    const e = $('#bootErr'); e.style.display = 'block'; e.style.whiteSpace = 'pre-wrap';
+    e.textContent = 'Demande en cours…';
+    try{
+      const f = await navigator.mediaDevices.getUserMedia({ video:true, audio:false });
+      const t = f.getVideoTracks()[0], st = t ? t.getSettings() : {};
+      e.textContent = "Caméra autorisée : " + (st.width||'?') + "×" + (st.height||'?') +
+        " (" + (t ? t.label : 'sans nom') + ").\nVous pouvez créer un profil avec la caméra.";
+      const v = $('#vid');
+      if(v && !camStream){ camStream = f; v.setAttribute('playsinline',''); v.muted = true;
+        v.srcObject = f; v.play().catch(()=>{}); }
+      else f.getTracks().forEach(x=>x.stop());
+    }catch(err){
+      e.textContent = "Refus de la caméra : " + (err.name||'') + " — " + (err.message||'') +
+        "\n\nDans Chrome, cliquez sur l'icône de caméra ou le cadenas à gauche de l'adresse, mettez Caméra sur Autoriser, puis rechargez.";
+    }
   });
   $('#btnS0back').addEventListener('click', ()=>showStep(1));
   $('#btnS0').addEventListener('click', async ()=>{
