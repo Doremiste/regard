@@ -314,6 +314,7 @@ body.hasStick .grid, body.hasStick .gaze{padding-bottom:clamp(150px,20vh,190px)}
    identifie la plateforme, et repère les navigateurs intégrés aux applications
    où iOS interdit la caméra. */
 window.__demarre = false;
+window.__debug = /[?&]debug/.test(location.search);
 window.__dis = function(t){
   var e = document.getElementById('bootErr');
   if(!e){ return; }
@@ -1735,6 +1736,27 @@ function tick(){
   }
   hi();
 }
+/* Safari ne répartit pas toujours la hauteur : on la lui impose en pixels. */
+function poseHauteur(){
+  const g = $('#grid'), z = $('#gazeWrap');
+  if(!g || !z) return;
+  const zones = z.classList.contains('on');
+  const el = zones ? z : g, autre = zones ? g : z;
+  if(autre) autre.style.height = '';
+  const vp = (window.visualViewport && window.visualViewport.height) || innerHeight;
+  const haut = Math.round(vp - el.getBoundingClientRect().top - 10);
+  if(haut > 140){ el.style.height = haut + 'px'; el.style.flex = '0 0 auto'; }
+  if(window.__debug){
+    const t = $('#tip');
+    if(t) t.textContent = 'écran ' + Math.round(vp) + ' · haut ' + Math.round(el.getBoundingClientRect().top) +
+      ' · clavier ' + el.offsetHeight + 'px · ' + (zones ? '9 zones' : 'complet') +
+      ' · cases ' + (zones ? gNodes.length : nodes.length);
+  }
+}
+addEventListener('resize', ()=>setTimeout(poseHauteur, 120));
+addEventListener('orientationchange', ()=>setTimeout(poseHauteur, 350));
+if(window.visualViewport) visualViewport.addEventListener('resize', ()=>setTimeout(poseHauteur, 120));
+
 function loopStart(){
   clearInterval(timer);
   const gazeOn = cfg.nav==='gaze';
@@ -1743,6 +1765,7 @@ function loopStart(){
   $('#gazeWrap').classList.toggle('on', zones);
   $('#gdot').classList.toggle('on', gazeOn && cfg.showDot);
   $('#cross').classList.toggle('on', (cfg.nav==='move') && cfg.showCross);
+  setTimeout(poseHauteur, 60);
   if(zones){
     buildGaze();
     if(!gazeOn){
@@ -2566,8 +2589,8 @@ function trainDone(){
 }
 
 /* ---------- Mode d'emploi intégré ---------- */
-const VERSION = '2.8';
-const VERSION_DATE = '22/08/2026 à 19h50';
+const VERSION = '2.9';
+const VERSION_DATE = '22/08/2026 à 20h15';
 const HELP = [
   ['Démarrer', [
     "À l'ouverture, choisissez un profil dans la liste, ou créez-en un.",
@@ -3039,6 +3062,9 @@ async function finishSetup(){
   pas('texte', render);
   pas('voix', renderVoice);
   pas('affichage', loopStart);
+  pas('hauteur', poseHauteur);
+  setTimeout(poseHauteur, 300);
+  setTimeout(poseHauteur, 900);
   pas('aide', tipText);
   pas('synchro', ()=>sync2());
   setTimeout(()=>{ try{ recenter(1); }catch(e){} }, 1200);
